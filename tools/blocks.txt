@@ -1,0 +1,702 @@
+# Palettes:
+# 0 green
+# 1 gray
+# 2 orange
+# 3 red?
+alias green 0
+alias gray 1
+alias orange 2
+alias red 3
+
++Bricks
+palette orange
+solid
+q $00
+
++BricksCoin
+palette orange
+solid
+q $00
+
++GrayBricks
+palette gray
+solid
+q $00
+
++Prize
+palette orange
+solid
+q $02
+
++UsedPrize
+palette gray
+solid
+q $04
+
++SolidBlock
+palette gray
+solid
+q $06
+
++Ladder
+palette orange
+t $08 $18
+t $08 $18
+
++LadderTop
+palette orange
+solid_top
+t $08 $18
+t $08 $18
+
++Spikes
+palette gray
+solid
+t $09 $09
+t $19 $19
+
++Money
+palette orange
+q $0a
+
++Spring
+palette red
+t $2f $2f
+t $0c $0d
+
++SpringPressed
+palette red
+t $2f $2f
+t $1c $1d
+
++Heart
+palette red
+q $0e
+
++PushableBlock
+palette gray
+solid
+t $06 $07
+t $26 $27
+
++PickupBlock
+palette gray
+solid
+t $24 $25
+t $16 $17
+
++CeilingBarrier
+palette gray
+t $28 $28
+t $28 $28
+
++SmallHeart
+palette red
+t $2f $2f
+t $2a $2b
+
+#udlr
++StoneSingle
+solid
+palette gray
+t $30 $32
+t $50 $52
+
+#udlR
++StoneHorizontalLeft
+solid
+palette gray
+t $30 $31
+t $50 $51
+
+#udLr
++StoneHorizontalRight
+solid
+palette gray
+t $31 $32
+t $51 $52
+
+#udLR
++StoneHorizontal
+solid
+palette gray
+t $31 $31
+t $51 $51
+
+#uDlr
++StoneVerticalTop
+solid
+palette gray
+t $30 $32
+t $40 $42
+
+#uDlR
++StoneCornerUL
+solid
+palette gray
+q $30
+
+#uDLr
++StoneCornerUR
+solid
+palette gray
+q $31
+
+#uDLR
++StoneTopSide
+solid
+palette gray
+t $31 $31
+t $41 $41
+
+#Udlr
++StoneVerticalBottom
+solid
+palette gray
+t $40 $42
+t $50 $52
+
+#UdlR
++StoneCornerDL
+solid
+palette gray
+q $40
+
+#UdLr
++StoneCornerDR
+solid
+palette gray
+q $41
+
+#UdLR
++StoneBottomSide
+solid
+palette gray
+t $41 $41
+t $51 $51
+
+#UDlr
++StoneVertical
+solid
+palette gray
+t $40 $42
+t $40 $42
+
+#UDlR
++StoneLeftSide
+solid
+palette gray
+t $40 $41
+t $40 $41
+
+#UDLr
++StoneRightSide
+solid
+palette gray
+t $41 $42
+t $41 $42
+
+#UDLR
++StoneMiddle
+solid
+palette gray
+t $51 $51
+t $51 $51
+
++FloatingPlatform
+solid_top
+palette gray
+t $33 $35
+t $2f $2f
+
++FloatingPlatformLeft
+solid_top
+palette gray
+t $33 $34
+t $2f $2f
+
++FloatingPlatformRight
+solid_top
+palette gray
+t $34 $35
+t $2f $2f
+
++FloatingPlatormMiddle
+solid_top
+palette gray
+t $34 $34
+t $2f $2f
+
++FloatingPlatformFallthrough
+class Fallthrough
+solid_top
+palette gray
+t $36 $38
+t $2f $2f
+
++FloatingPlatformLeftFallthrough
+class Fallthrough
+solid_top
+palette gray
+t $36 $37
+t $2f $2f
+
++FloatingPlatformRightFallthrough
+class Fallthrough
+solid_top
+palette gray
+t $37 $38
+t $2f $2f
+
++FloatingPlatormMiddleFallthrough
+class Fallthrough
+solid_top
+palette gray
+t $38 $38
+t $2f $2f
+
++CloudL
+palette gray
+q $3b
+
++CloudM
+palette gray
+t $3d $3e
+t $4c $4c
+
++CloudR
+palette gray
+t $3f $2f
+$ $4f $2f
+
++Cloud2L
+palette gray
+t $2f $2b
+t $2f $3b
+
++Cloud2M
+palette gray
+t $3c $3d
+t $4c $4c
+
++Cloud2R
+palette gray
+t $3e $3f
+t $4c $4f
+
++Rock
+solid
+palette gray
+q $43
+
++Vine
+palette green
+q $68
+
++Vine2
+palette red
+q $68
+
++Vine3
+palette orange
+q $68
+
++BigFlower1
+palette orange
+q $64
+
++BigFlower2
+palette orange
+q $66
+
++BigFlower3
+palette red
+q $64
+
++BigFlower4
+palette red
+q $66
+
++WaterTop
+class Water
+palette red
+t $5c $5c
+t $5e $5e
+
++WaterMiddle
+class Water
+palette red
+t $5e $5e
+t $5e $5e
+
++WaterBelow
+class Water
+palette red
+t $5f $5f
+t $5e $5e
+
++WaterIceTop
+palette red
+solid_top
+t $5d %5d
+t $5e $5e
+
++Ice
+palette gray
+solid
+q $39
+
++Ice2
+palette red
+solid
+q $39
+
++Leaves
+palette green
+q $60
+
++Trunk
+palette orange
+t $72 $73
+t $72 $73
+
++TrunkTop
+solid_top
+palette orange
+t $62 $63
+t $72 $73
+
++WhiteFenceLeft
+solid_top
+palette gray
+t $6d $6e
+t $7d $7e
+
++WhiteFenceMiddle
+solid_top
+palette gray
+t $6e $6e
+t $7e $7e
+
++WhiteFenceRight
+solid_top
+palette gray
+t $6e $6f
+t $7e $7f
+
++Terrain
+solid
+palette green
+q $47
+
++TerrainLeft
+solid
+palette green
+t $45 $48
+t $55 $58
+
++TerrainRight
+solid
+palette green
+t $47 $46
+t $57 $56
+
++TerrainInside
+solid
+palette green
+t $5a $5a
+t $5a $5a
+
++TerrainInsideL
+solid
+palette green
+t $59 $5a
+t $5a $5a
+
++TerrainInsideR
+solid
+palette green
+t $5a $5b
+t $5a $5a
+
++BelowTerrain
+palette green
+t $29 $29
+t $2f $2f
+
+
++Lock1
+palette 0
+q $a0
+
++Lock2
+palette 1
+q $a0
+
++Lock3
+palette 2
+q $a0
+
++Lock4
+palette 3
+q $a0
+
++Key1
+palette 0
+q $a2
+
++Key2
+palette 1
+q $a2
+
++Key3
+palette 2
+q $a2
+
++Key4
+palette 3
+q $a2
+
++Bomb
+palette red
+q $a4
+
++WoodArrowRight
+solid
+palette orange
+q $c6
+
++WoodArrowDown
+solid
+palette orange
+q $c2
+
++WoodArrowLeft
+solid
+palette orange
+q $c0
+
++WoodArrowUp
+solid
+palette orange
+q $c4
+
++MetalArrowRight
+solid
+palette gray
+q $c6
+
++MetalArrowDown
+solid
+palette gray
+q $c2
+
++MetalArrowLeft
+solid
+palette gray
+q $c0
+
++MetalArrowUp
+solid
+palette gray
+q $c4
+
++WoodCrate
+solid
+palette orange
+q $c8
+
++MetalCrate
+solid
+palette gray
+q $ca
+
++BrickFenceTop
+solid_top
+palette red
+t $de $df
+t $dc $dd
+
++BrickFence
+palette red
+q $cc
+
++TallGrass
+palette green
+t $2f $2f
+t $ea $eb
+
++Fence
+palette orange
+q $ee
+
++Flower1
+palette green
+t $ec $ed
+t $fa $fb
+
++Flower2
+palette green
+t $fc $fd
+t $fa $fb
+
++Flower3
+palette orange
+t $ec $ed
+t $fa $fb
+
++Flower4
+palette orange
+t $fc $fd
+t $fa $fb
+
++Flower5
+palette red
+t $ec $ed
+t $fa $fb
+
++Flower6
+palette red
+t $fc $fd
+t $fa $fb
+
++Flower7
+palette gray
+t $ec $ed
+t $fa $fb
+
++Flower8
+palette gray
+t $fc $fd
+t $fa $fb
+
++PierTop
+solid_top
+palette orange
+q $a8
+
++PierMiddle
+palette orange
+t $b8 $b9
+t $b8 $b9
+
++WoodPole
+palette orange
+t $f3 $f4
+t $f3 $f4
+
++SmallBushTop
+palette green
+t $2f $2f
+t $e5 $f6
+
++SmallBushBottom
+palette green
+t $e7 $e9
+t $f7 $f9
+
++TreetopUL
+palette green
+t $2f $2f
+t $e5 $e6
+
++TreetopUR
+palette green
+t $2f $2f
+t $f5 $f6
+
++TreetopDL
+palette green
+t $e7 $2d
+t $f7 $f8
+
++TreetopDR
+palette green
+t $2d $e9
+t $f8 $f9
+
++TrunkL
+palette orange
+t $2f $f3
+t $2f $f3
+
++TrunkR
+palette orange
+t $f4 $2f
+t $f4 $2f
+
++WoodPlatformMiddle
+solid_top
+palette orange
+t $e3 $e3
+t $2f $2f
+
++WoodPlatformLeft
+solid_top
+palette orange
+t $e2 $e3
+t $2f $2f
+
++WoodPlatformRight
+solid_top
+palette orange
+t $e3 $e5
+t $2f $2f
+
++JungleBridgeTop
+palette orange
+t $2f $2f
+t $e0 $e1
+
++JungleBridge
+solid_top
+palette gray
+t $f1 $f1
+t $2f $2f
+
++JungleBridgeLeft
+solid_top
+palette gray
+t $f0 $f1
+t $2f $2f
+
++JungleBridgeRight
+solid_top
+palette gray
+t $f1 $f2
+t $2f $2f
+
++DoorTop
+palette gray
+t $20 $21
+t $2c $2c
+
++DoorExit
+palette gray
+t $22 $23
+t $2c $2c
+
++DoorBottom
+palette gray
+t $2c $2c
+t $2c $2c
+
++BigBushUL
+palette green
+t $2f $2f
+t $e5 $e6
+
++BigBushUR
+palette green
+t $2f $2f
+t $f5 $f6
+
++BigBushDL
+palette green
+t $e7 $2d
+t $f7 $f8
+
++BigBushDR
+palette green
+t $2d $e9
+t $f8 $f9
