@@ -14,11 +14,11 @@
   dex             ; Subtracting 1 from $00 gives $FF, which is a
   txs             ; quick way to set the stack pointer to $01FF
   bit PPUSTATUS   ; Acknowledge stray vblank NMI across reset
-  bit SNDCHN      ; Acknowledge DMC IRQ
+  bit SND_CHN      ; Acknowledge DMC IRQ
   lda #$40
-  sta P2          ; Disable APU Frame IRQ
+  sta $4017          ; Disable APU Frame IRQ
   lda #$0F
-  sta SNDCHN      ; Disable DMC playback, initialize other channels
+  sta SND_CHN      ; Disable DMC playback, initialize other channels
 
 vwait1:
   bit PPUSTATUS   ; It takes one full frame for the PPU to become

@@ -17,7 +17,7 @@ version = 0.01
 # Space-separated list of assembly language files that make up the
 # PRG ROM.  If it gets too long for one line, you can add a backslash
 # (the \ character) at the end of the line and continue on the next.
-objlist = main init bg player \
+objlist = main init bg player leveldata levelcommandtable \
 pads ppuclear mapper chrram bankcalltable memory
 
 AS65 = ca65
@@ -88,6 +88,7 @@ clean:
 
 objlisto = $(foreach o,$(objlist),$(objdir)/$(o).o)
 objlistalto = $(foreach o,$(objlistalt),$(objdir)/$(o).o)
+levels := $(wildcard levels/*.json)
 
 map.txt $(title).nes: linker.cfg $(objlisto)
 	$(LD65) -o $(title).nes --dbgfile $(title).dbg -m map.txt -C $^
@@ -116,4 +117,9 @@ $(objdir)/%.chr: $(imgdir)/%.png
 $(objdir)/%16.chr: $(imgdir)/%.png
 	$(PY) tools/pilbmp2nes.py -H 16 $< $@
 
-
+$(srcdir)/levelcommandtable.s: tools/levelconvert.py
+	$(PY) tools/levelconvert.py generate_table
+$(objdir)/leveldata.o: $(srcdir)/levelcommandtable.s tools/levelconvert.py $(levels) $(srcdir)/blockenum.s
+	$(PY) tools/levelconvert.py levels
+$(srcdir)/blockenum.s: tools/blocks.txt tools/makeblocks.py
+	$(PY) tools/makeblocks.py
