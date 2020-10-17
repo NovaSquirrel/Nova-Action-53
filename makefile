@@ -18,7 +18,7 @@ version = 0.01
 # PRG ROM.  If it gets too long for one line, you can add a backslash
 # (the \ character) at the end of the line and continue on the next.
 objlist = main init bg player leveldata levelcommandtable \
-pads ppuclear mapper chrram bankcalltable memory
+pads ppuclear mapper chrram bankcalltable memory blockdata blockcode
 
 AS65 = ca65
 LD65 = ld65
@@ -119,7 +119,8 @@ $(objdir)/%16.chr: $(imgdir)/%.png
 
 $(srcdir)/levelcommandtable.s: tools/levelconvert.py
 	$(PY) tools/levelconvert.py generate_table
-$(objdir)/leveldata.o: $(srcdir)/levelcommandtable.s tools/levelconvert.py $(levels) $(srcdir)/blockenum.s
+$(srcdir)/leveldata.s: $(srcdir)/levelcommandtable.s tools/levelconvert.py $(levels) $(srcdir)/blockenum.s
 	$(PY) tools/levelconvert.py levels
 $(srcdir)/blockenum.s: tools/blocks.txt tools/makeblocks.py
 	$(PY) tools/makeblocks.py
+$(srcdir)/blockdata.s: $(srcdir)/blockenum.s

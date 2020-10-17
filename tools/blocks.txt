@@ -9,11 +9,13 @@ alias orange 2
 alias red 3
 
 +Bricks
+when Below, BlockBricks
 palette orange
 solid
 q $00
 
 +BricksCoin
+when Below, BlockPrize
 palette orange
 solid
 q $00
@@ -24,6 +26,7 @@ solid
 q $00
 
 +Prize
+when Collect, BlockPrize
 palette orange
 solid
 q $02
@@ -50,16 +53,19 @@ t $08 $18
 t $08 $18
 
 +Spikes
+when Above, BlockSpike
 palette gray
 solid
 t $09 $09
 t $19 $19
 
 +Money
+when Collect, BlockMoney
 palette orange
 q $0a
 
 +Spring
+when Inside, BlockSpring
 palette red
 t $2f $2f
 t $0c $0d
@@ -70,27 +76,32 @@ t $2f $2f
 t $1c $1d
 
 +Heart
+when Inside, BlockHeart
 palette red
 q $0e
 
 +PushableBlock
+when Side, BlockPushableBlock
 palette gray
 solid
 t $06 $07
 t $26 $27
 
 +PickupBlock
+when Above, BlockPickupBlock
 palette gray
 solid
 t $24 $25
 t $16 $17
 
 +CeilingBarrier
+when Inside, BlockCeilingBarrier
 palette gray
 t $28 $28
 t $28 $28
 
 +SmallHeart
+when Collect, BlockSmallHeart
 palette red
 t $2f $2f
 t $2a $2b
@@ -424,59 +435,71 @@ palette green
 t $29 $29
 t $2f $2f
 
-
 +Lock1
+when Collect, BlockLock
 palette 0
 q $a0
 
 +Lock2
+when Collect, BlockLock
 palette 1
 q $a0
 
 +Lock3
+when Collect, BlockLock
 palette 2
 q $a0
 
 +Lock4
+when Collect, BlockLock
 palette 3
 q $a0
 
 +Key1
+when Collect, BlockKey
 palette 0
 q $a2
 
 +Key2
+when Collect, BlockKey
 palette 1
 q $a2
 
 +Key3
+when Collect, BlockKey
 palette 2
 q $a2
 
 +Key4
+when Collect, BlockKey
 palette 3
 q $a2
 
 +Bomb
+when Inside, BlockBomb
 palette red
 q $a4
 
 +WoodArrowRight
+when Collect, BlockWoodArrowRight
 solid
 palette orange
 q $c6
 
 +WoodArrowDown
+when Collect, BlockWoodArrowDown
 solid
 palette orange
 q $c2
 
 +WoodArrowLeft
+when Collect, BlockWoodArrowLeft
 solid
 palette orange
 q $c0
 
 +WoodArrowUp
+when Collect, BlockWoodArrowUp
 solid
 palette orange
 q $c4
@@ -502,6 +525,7 @@ palette gray
 q $c4
 
 +WoodCrate
+when Above, BlockWoodCrate
 solid
 palette orange
 q $c8
@@ -677,6 +701,7 @@ t $22 $23
 t $2c $2c
 
 +DoorBottom
+when Inside, BlockDoorBottom
 palette gray
 t $2c $2c
 t $2c $2c

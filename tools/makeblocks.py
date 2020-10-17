@@ -5,10 +5,9 @@ from novashared import *
 default_palette = 0
 default_base = 0
 block = None
-all_blocks = []
+blocks_for_interaction_type = {}
 all_classes = set()
 all_interaction_procs = set()
-all_interaction_sets = []
 
 # Read and process the file
 with open("tools/blocks.txt") as f:
@@ -17,14 +16,9 @@ with open("tools/blocks.txt") as f:
 def saveBlock():
 	if block == None:
 		return
-	if block['interaction'] != {}:
-		# If there is already a interaction set that matches, use that one
-		# otherwise add a new one
-		if block['interaction'] not in all_interaction_sets:
-			all_interaction_sets.append(block['interaction'])
-		block['interaction_set'] = all_interaction_sets.index(block['interaction']) + 1 # + 1 because zero is no interaction
-
-	all_blocks.append(block)
+	if block['interaction_type'] not in blocks_for_interaction_type:
+		blocks_for_interaction_type[block['interaction_type']] = []
+	blocks_for_interaction_type[block['interaction_type']].append(block)
 
 for line in text:
 	if not len(line):
@@ -35,8 +29,8 @@ for line in text:
 		saveBlock()
 		# Reset to prepare for the new block
 		priority = False
-		block = {"name": line[1:], "solid": False, "solid_top": False, "palette": 0, \
-		  "tiles": [], "interaction": {}, "interaction_set": 0, "class": "None", "autotile": None}
+		block = {"name": line[1:], "solid": False, "solid_top": False, "palette": default_palette, \
+		  "tiles": [], "interaction_routine": None, "interaction_type": "", "class": "None", "autotile": None}
 		continue
 	word, arg = separateFirstWord(line)
 	# Miscellaneous directives
@@ -49,30 +43,16 @@ for line in text:
 		default_base = parseNumber(arg)
 	elif word == "palette":
 		default_palette = parseNumber(arg)
+		block['palette'] = default_palette
 
 	elif word == "when": #Behaviors
 		arg = arg.split(", ")
-
-		# Aliases for selecting multiple interaction types at once
-		if arg[0] == "Touch":
-			arg[0] = ("InsideBody", "InsideHead", "Above", "Below", "Side")
-		elif arg[0] == "SolidCheck":
-			arg[0] = ("InsideHead", "Above", "Below", "Side", "ActorTopBottom", "ActorSide")
-		elif arg[0] == "PlayerSolidCheck":
-			arg[0] = ("InsideHead", "Above", "Below", "Side")
-		elif arg[0] == "ActorSolidCheck":
-			arg[0] = ("ActorTopBottom", "ActorSide")
-		elif arg[0] == "Inside":
-			arg[0] = ("InsideBody", "InsideHead")
-		else:
-			arg[0] = (arg[0],)
-		for i in arg[0]:
-			block["interaction"][i] = arg[1]
+		block['interaction_type'] = arg[0]
+		block['interaction_routine'] = arg[1]
 		all_interaction_procs.add(arg[1])
 	elif word == "autotile":
 		block["autotile"] = arg
 		all_interaction_procs.add(arg)
-
 	elif word == "class":
 		block["class"] = arg
 		all_classes.add(arg)
@@ -93,6 +73,19 @@ for line in text:
 # Save the last one
 saveBlock()
 
+# Process all the interaction types
+all_blocks = []
+id = 0
+firstlast_interactions = ''
+for interaction_type in sorted(blocks_for_interaction_type.keys()): # Will put "" first	
+	if len(interaction_type):
+		firstlast_interactions += 'BlockFirst%s = %d\n' % (interaction_type, id)
+	for block in blocks_for_interaction_type[interaction_type]:
+		all_blocks.append(block)
+		id += 1
+	if len(interaction_type):
+		firstlast_interactions += 'BlockLast%s = %d\n' % (interaction_type, id-1)
+
 # Generate the output that's actually usable in the game
 outfile = open("src/blockdata.s", "w")
 
@@ -101,7 +94,7 @@ outfile.write('.include "blockenum.s"\n\n')
 outfile.write('.export BlockTopLeft, BlockTopRight, BlockBottomLeft, BlockBottomRight\n')
 outfile.write('.export BlockPalette, BlockFlags\n')
 outfile.write('.import %s\n' % str(", ".join(all_interaction_procs)))
-outfile.write('\n.segment "BlockGraphicData"\n\n')
+outfile.write('\n.segment "BlockData"\n\n')
 
 # Block appearance information
 corners = ["TopLeft", "TopRight", "BottomLeft", "BottomRight"]
@@ -111,38 +104,29 @@ for corner, cornername in enumerate(corners):
 		outfile.write('  .byt $%.2x ; %s\n' % (b['tiles'][corner], b['name']))
 	outfile.write(".endproc\n\n")
 
+# Palette is separate on the NES
 palette_four_times = ["%00000000", "%01010101", "%10101010", "%11111111"]
 outfile.write(".proc BlockPalette\n")
 for b in all_blocks:
 	outfile.write('  .byt %s ; %s\n' % (palette_four_times[b['palette']], b['name']))
 outfile.write(".endproc\n\n")
 
-# Write block interaction information
-outfile.write('.segment "BlockInteraction"\n\n')
-
 outfile.write('.proc BlockFlags\n')
 for b in all_blocks:
-	outfile.write('  .byt %d, $%x|BlockClass::%s ; %s\n' % (b['interaction_set'], \
-	  b['solid'] * 0x80 + b['solid_top'] * 0x40, b['class'], b['name']))
+	outfile.write('  .byt $%x|BlockClass::%s ; %s\n' % (b['solid'] * 0x80 + b['solid_top'] * 0x40, b['class'], b['name']))
 outfile.write('.endproc\n\n')
 
-outfile.write(".proc BlockNothing\n  rts\n.endproc\n\n")
-
-print("Interaction sets: %d" % len(all_interaction_sets))
-
-# Write all interaction type tables corresponding to each interaction set
-interaction_types = ["Above", "Below", "Side", "InsideHead", "InsideBody", "ActorInside", "ActorTopBottom", "ActorSide"]
-for interaction in interaction_types:
+# Write all interaction type tables
+for interaction, blocks in blocks_for_interaction_type.items():
+	if not len(interaction):
+		continue
 	outfile.write(".export BlockInteraction%s\n" % interaction)
 	outfile.write(".proc BlockInteraction%s\n" % interaction)
-	outfile.write('  .addr .loword(BlockNothing)\n') # Empty interaction set
-	for b in all_interaction_sets:
-		if interaction in b:
-			outfile.write('  .addr .loword(%s)\n' % b[interaction])
-		else:
-			outfile.write('  .addr .loword(BlockNothing)\n')
+	for b in blocks:
+		outfile.write('  .addr (%s-1)\n' % b['interaction_routine'])
 	outfile.write(".endproc\n\n")
 
+"""
 # Write all the autotile settings
 outfile.write('.segment "LevelDecompress"\n\n')
 
@@ -154,6 +138,7 @@ for b in all_blocks:
 	else:
 		outfile.write('  .addr 0\n')
 outfile.write('.endproc\n\n')
+"""
 
 outfile.close()
 
@@ -162,7 +147,7 @@ outfile = open("src/blockenum.s", "w")
 outfile.write('; This is automatically generated. Edit "blocks.txt" instead\n')
 outfile.write('.enum Block\n')
 for i, b in enumerate(all_blocks):
-	outfile.write('  %s = %d\n' % (b['name'], i*2))
+	outfile.write('  %s = %d\n' % (b['name'], i))
 outfile.write('.endenum\n\n')
 
 # Generate the class enum
@@ -171,5 +156,8 @@ outfile.write('  None\n')
 for b in all_classes:
 	outfile.write('  %s\n' % b)
 outfile.write('.endenum\n\n')
+
+# First and last items in the ranges for interactions
+outfile.write(firstlast_interactions+"\n")
 
 outfile.close()

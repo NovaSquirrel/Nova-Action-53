@@ -73,7 +73,7 @@ LSpecialCmd = $f7
 
 ;-----------------------------------------------------------------------------
 
-.import FirstSingleType, FirstRectType, FirstWideType, FirstTallType, FirstBigRectType
+.importzp FirstSingleType, FirstRectType, FirstWideType, FirstTallType, FirstBigRectType
 
 .macro LSingle type, rx, ry
 	LObj FirstSingleType+type, rx, ry
@@ -94,6 +94,23 @@ LSpecialCmd = $f7
 .macro LBigRect type, rx, ry, rw, rh
 	LObjN FirstBigRectType+(type/16), rx, ry, rh, type&15, rw
 .endmacro
+
+;-----------------------------------------------------------------------------
+
+.enum MusicTracks
+	NONE
+.endenum
+
+.enum GraphicsUpload
+	SP_WALKER
+	SP_CANNON
+	SP_FIRE
+	SP_KING
+.endenum
+
+.enum Enemy
+	GOOMBA
+.endenum
 
 ;-----------------------------------------------------------------------------
 .export LevelPointerList

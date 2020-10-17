@@ -31,13 +31,13 @@ def FindCommandFor(type, w, h, x, y):
 	if w == 1 and h == 1 and type in SingleTypes:
 		return "LSingle SingleEnum::%s, %d, %d" % (type, x, y)
 	elif w <= 16 and h <= 16 and type in RectTypes:
-		return "LRect RectEnum::%s %d, %d, %d, %d" % (type, x, y, w, h)
+		return "LRect RectEnum::%s, %d, %d, %d, %d" % (type, x, y, w, h)
 	elif type in LineTypes:
 		if w == 1 and h <= 16:
-			return "LTall LineEnum::%s %d, %d, %d" % (type, x, y, h)
+			return "LTall LineEnum::%s, %d, %d, %d" % (type, x, y, h)
 		if h == 1 and w <= 16:
-			return "LWide LineEnum::%s %d, %d, %d" % (type, x, y, w)
-		return "LBigRect LineEnum::%s %d, %d, %d, %d" % (type, x, y, w, h)
+			return "LWide LineEnum::%s, %d, %d, %d" % (type, x, y, w)
+		return "LBigRect LineEnum::%s, %d, %d, %d, %d" % (type, x, y, w, h)
 	return None
 
 # Return an array containing all rectangles in a layer, matching a given list of types
@@ -86,11 +86,14 @@ def ExportLevel(filename):
 	level_json = json.loads(level_text)
 
 	# Strip that slash off
-	slash = filename.rfind('/')
+	slash = filename.rfind('\\')
+	if slash == -1:
+		slash = filename.rfind('/')
 	if slash != -1:
 		without_dir = filename[slash+1:]
 	else:
 		without_dir = filename
+	print(without_dir)
 
 	FG = []
 	for z in range(len(level_json["Layers"][0]["Data"])):

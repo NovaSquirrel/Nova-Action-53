@@ -21,3 +21,4 @@ src/blockdata.s
 src/blockenum.s
 src/levelcommandtable.s
 src/levelcommandenum.s
+levels/*.s
