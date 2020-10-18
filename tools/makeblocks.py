@@ -123,22 +123,24 @@ for interaction, blocks in blocks_for_interaction_type.items():
 	outfile.write(".export BlockInteraction%s\n" % interaction)
 	outfile.write(".proc BlockInteraction%s\n" % interaction)
 	for b in blocks:
-		outfile.write('  .addr (%s-1)\n' % b['interaction_routine'])
+		outfile.write('  .addr %s-1\n' % b['interaction_routine'])
 	outfile.write(".endproc\n\n")
 
-"""
-# Write all the autotile settings
-outfile.write('.segment "LevelDecompress"\n\n')
-
+# Write all the autotile tables
 outfile.write('.export BlockAutotile\n')
 outfile.write('.proc BlockAutotile\n')
-for b in all_blocks:
+for i, b in enumerate(all_blocks):
 	if b['autotile']:
-		outfile.write('  .addr .loword(%s - 1)\n' % b['autotile'])
-	else:
-		outfile.write('  .addr 0\n')
+		outfile.write('  .byt %d ;%s\n' % (i, b['name']))
+outfile.write('  .byt 255 ; End\n')
 outfile.write('.endproc\n\n')
-"""
+# Separate list of routines
+outfile.write('.export BlockAutotileRoutine\n')
+outfile.write('.proc BlockAutotileRoutine\n')
+for i, b in enumerate(all_blocks):
+	if b['autotile']:
+		outfile.write('  .addr %s-1 ;%s\n' % (b['autotile'], b['name']))
+outfile.write('.endproc\n\n')
 
 outfile.close()
 

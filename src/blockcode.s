@@ -98,3 +98,73 @@
 .proc BlockWoodCrate
   rts
 .endproc
+
+.export AutotileTerrain
+.proc AutotileTerrain
+  rts
+.endproc
+
+.export AutotileLadder
+.proc AutotileLadder
+  rts
+.endproc
+
+.export AutotileStone
+.proc AutotileStone
+  rts
+.endproc
+
+.export AutotileFloatingPlatform
+.proc AutotileFloatingPlatform
+  rts
+.endproc
+
+.export AutotileFloatingPlatformFallthrough
+.proc AutotileFloatingPlatformFallthrough
+  rts
+.endproc
+
+.export AutotileWater
+.proc AutotileWater
+  rts
+.endproc
+
+.export AutotileWhiteFence
+.proc AutotileWhiteFence
+  rts
+.endproc
+
+.export AutotileBrickFence
+.proc AutotileBrickFence
+  rts
+.endproc
+
+.export AutotileSmallBush
+.proc AutotileSmallBush
+  rts
+.endproc
+
+.export AutotileTree
+.proc AutotileTree
+  rts
+.endproc
+
+.export AutotileWoodPlatform
+.proc AutotileWoodPlatform
+  rts
+.endproc
+
+.export AutotileJungleBridge
+.proc AutotileJungleBridge
+  rts
+.endproc
+
+.export AutotileDoor
+.proc AutotileDoor
+  rts
+.endproc
+
+.export AutotileBigBush
+.proc AutotileBigBush
+  rts
+.endproc
