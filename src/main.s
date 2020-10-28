@@ -9,21 +9,25 @@
 ;
 
 .include "nes.inc"
-.include "mmc1.inc"
+.include "mapper.inc"
 .include "global.inc"
 
 OAM = $0200
 
 .segment "ZEROPAGE"
-nmis:          .res 1
-oam_used:      .res 1  ; starts at 0
-cur_keys:      .res 2
-new_keys:      .res 2
 
 .segment "CODE"
 
+.export WaitVblank
+.proc WaitVblank
+  lda retraces
+: cmp retraces
+  beq :-
+  rts
+.endproc
+
 .proc nmi_handler
-  inc nmis
+  inc retraces
   rti
 .endproc
 
@@ -54,7 +58,7 @@ new_keys:      .res 2
 forever:
 
   ; Game logic
-  jsr read_pads
+  jsr ReadController
   jsr move_player
 
   ; The first entry in OAM (indices 0-3) is "sprite 0".  In games
@@ -62,20 +66,17 @@ forever:
   ; help split the screen.  This demo doesn't use scrolling, but
   ; yours might, so I'm marking the first entry used anyway.  
   ldx #4
-  stx oam_used
-  ; adds to oam_used
+  stx OamPtr
+  ; adds to OamPtr
   ldx #draw_player_sprite
   jsr bankcall
-  ldx oam_used
+  ldx OamPtr
   jsr ppu_clear_oam
 
-
-  ; Good; we have the full screen ready.  Wait for a vertical blank
-  ; and set the scroll registers to display it.
-  lda nmis
-vw3:
-  cmp nmis
-  beq vw3
+  ; Wait for next screen
+  lda retraces
+: cmp retraces
+  beq :-
   
   ; Copy the display list from main RAM to the PPU
   lda #0

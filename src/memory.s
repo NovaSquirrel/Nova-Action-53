@@ -2,14 +2,13 @@
 
 .segment "ZEROPAGE"
   retraces: .res 1
-  keydown: .res 1
-  keylast: .res 1
-  keynew: .res 1
+  keydown: .res 2
+  keylast: .res 2
+  keynew: .res 2
   seed: .res 4
   ScrollX: .res 2
 
-  ObjectLen = 16
-  ObjectF1:         .res ObjectLen ; TTTTTTTD, Type, Direction
+  ActorType:       .res ActorLen ; TTTTTTTD, Type, Direction
   EnemyRightEdge:   .res 1     ; Usually $f0 but can be $70 for 8 pixel wide enemies
 
   ; player state stuff
@@ -24,7 +23,6 @@
 
   PlayerWasRunning: .res 1     ; was the player running when they jumped?
   PlayerDir:        .res 1     ; currently facing left?
-  PlayerDirForScroll: .res 1   ; similar but for scrolling purposes
   PlayerJumping:    .res 1     ; true if jumping (not falling)
   PlayerOnGround:   .res 1     ; true if on ground
   PlayerJumpCancelLock: .res 1 ; timer for the player being unable to cancel a jump
@@ -44,8 +42,6 @@
 
   ; the NES CPU can't access VRAM outside of vblank, so this is a queue
   ; of metatile and byte updates that wait until vblank to trigger
-  MaxNumBlockUpdates = 4
-  MaxNumTileUpdates  = 4
   BlockUpdateA1:   .res MaxNumBlockUpdates ; \ address of the top two tiles
   BlockUpdateA2:   .res MaxNumBlockUpdates ; /
   BlockUpdateB1:   .res MaxNumBlockUpdates ; \ address of the bottom two tiles
@@ -63,15 +59,7 @@
   ThirtyUpdateAddr: .res 2      ; PPU address to write the buffer to
   ThirtyUpdateTile: .res 30     ; 30 tiles to write
 
-  TempSpace = ThirtyUpdateTile  ; The buffer is also used by non-gameplay stuff, so give it another name
   ScrollLevelPointer: .res 2    ; Pointer to level data, used while scrolling in new tiles
-
-  ; variables for decoding objects during level decompression
-  DecodeObjectType   = TempSpace+0 ; object type ID
-  DecodeObjectXY     = TempSpace+1 ; X and Y position of the block
-  DecodeObjectBlock  = TempSpace+2 ; block ID to rectangle fill with
-  DecodeObjectWidth  = TempSpace+3 ; width to rectangle fill with
-  DecodeObjectHeight = TempSpace+4 ; height to rectangle fill with
 
   OamPtr:      .res 1 ; Index the next OAM entry goes in
 
@@ -83,6 +71,7 @@
                       ; also general temporary variable for routines that don't switch
 
   NeedLevelReload:       .res 1 ; If set, decode LevelNumber again
+  LevelNumber:           .res 1
 
   BlockMiddle: .res 1 ; what block the middle of the player is overlapping
 
@@ -113,9 +102,6 @@
   ; The reason they're not already in one of the temporary space buffers is that they're
   ; written as a group, and LevelBackgroundColor and SpriteTileSlots *are* used elsewhere
 
-  LevelHeaderPointer = TouchTemp ; pointer to the level header, for reading it
-  LevelDecodeXPos = TouchTemp+2  ; current X position
-
 .segment "BSS"
   PlayerLastGoodX: .res 2
   PlayerLastGoodY: .res 2
@@ -124,8 +110,6 @@
   NeedAbilityChangeNoSound: .res 1
   NeedLevelRerender: .res 1
   JustTeleported:    .res 1 ; if 0, don't redo sprites
-
-  PRGBank:         .res 1  ; current program bank
 
   ; queue for attribute table updates for scrolling
   AttributeWriteA1: .res 1 ; high address, always the same for the four writes
@@ -147,27 +131,26 @@
   PlayerLeftRightLock:   .res 1
 
   ; DelayedMetaEdits set a timer for when a block in the level should be replaced with something else
-  MaxDelayedMetaEdits = 10
 ; DelayedMetaEditIndexHi
   DelayedMetaEditIndexLo: .res MaxDelayedMetaEdits  ; low address in the level array
   DelayedMetaEditTime:    .res MaxDelayedMetaEdits  ; amount of time
   DelayedMetaEditType:    .res MaxDelayedMetaEdits  ; new block type
 
-  ObjectPXH:   .res ObjectLen ; \ horizontal and vertical positions
-  ObjectPXL:   .res ObjectLen ;  \
-  ObjectPYH:   .res ObjectLen ;  /
-  ObjectPYL:   .res ObjectLen ; /
-  ObjectVXH:   .res ObjectLen ; \ horizontal and vertical speeds
-  ObjectVXL:   .res ObjectLen ;  \
-  ObjectVYH:   .res ObjectLen ;  /
-  ObjectVYL:   .res ObjectLen ; /
-; ObjectF1
-  ObjectF2:    .res ObjectLen ; 1SSSSSSS, State
+  ActorPXH:   .res ActorLen ; \ horizontal and vertical positions
+  ActorPXL:   .res ActorLen ;  \
+  ActorPYH:   .res ActorLen ;  /
+  ActorPYL:   .res ActorLen ; /
+  ActorVXH:   .res ActorLen ; \ horizontal and vertical speeds
+  ActorVXL:   .res ActorLen ;  \
+  ActorVYH:   .res ActorLen ;  /
+  ActorVYL:   .res ActorLen ; /
+; ActorType
+  ActorState:  .res ActorLen ; 1SSSSSSS, State
                               ; 0------- free to use
-  ObjectF3:    .res ObjectLen ; -------- ;\ free to use. initialized with object variant
-  ObjectF4:    .res ObjectLen ; -------- ;/
-  ObjectIndexInLevel: .res ObjectLen ; object's index in level list, prevents object from being respawned until it's despawned
-  ObjectTimer: .res ObjectLen ; when timer reaches 0, reset state
+  ActorVarA:   .res ActorLen ; -------- ;\ free to use. initialized with object variant
+  ActorVarB:   .res ActorLen ; -------- ;/
+  ActorIndexInLevel: .res ActorLen ; object's index in level list, prevents object from being respawned until it's despawned
+  ActorTimer:  .res ActorLen ; when timer reaches 0, reset state
 
   ; Physics variables that are translated from the saved options
   NovaAccelSpeed: .res 1
@@ -176,6 +159,7 @@
   NovaRunSpeedR:  .res 1
   TapRunTimer: .res 1           ; timer for determining if it's a double tap
   TapRunKey:   .res 1           ; which d-pad button the run was started right (left/right)
+  SNESController: .res 1
 
 LevelZeroWhenLoad_Start:
   RunStartedWithTap:      .res 1 ; if 1, the current run started with a tap
@@ -193,15 +177,11 @@ LevelZeroWhenLoad_Start:
   ScreenFlags:            .res 16
   ScreenFlagsDummy:       .res 1
   ; ScreenFlags stores flags for each screen in the level; so far there's just one flag:
-  SCREEN_BOUNDARY = 1 ; boundary on left side of screen
+  ; SCREEN_BOUNDARY = 1 ; boundary on left side of screen
   ; Now more stuff...
   FallingBlockPointer:    .res 2
   FallingBlockY:          .res 1
   CarryingPickupBlock:    .res 1
-.ifdef NEW_TOGGLE_BEHAVIOR
-  ToggleBlockEnabled:     .res 1 ; 64 if enabled, 0 if not
-  ToggleBlockUpload:      .res 1 ; 1 or 2 if it needs uploading
-.endif
 LevelZeroWhenLoad_End:
 
   PlayerAbility:      .res 1     ; current ability, see the AbilityType enum
@@ -209,22 +189,22 @@ LevelZeroWhenLoad_End:
 ; Current game state (saved in checkpoints)
 CurrentGameState:
   Coins:              .res 2     ; 2 digits, BCD
-  InventoryLen = 10
-  InventoryLenFull = 20          ; full inventory including second page
-  InventoryType:           .res InventoryLen
-  InventoryPerLevelType:   .res InventoryLen
-  InventoryAmount:         .res InventoryLen
-  InventoryPerLevelAmount: .res InventoryLen
-  InventoryEnd:
-GameStateLen = 2+10*4 ; update if more stuff is added. Just coins and inventory.
-  InventoryPage: .res 1 ; 0 normally, InventoryLen if second page
+;  InventoryLen = 10
+;  InventoryLenFull = 20          ; full inventory including second page
+;  InventoryType:           .res InventoryLen
+;  InventoryPerLevelType:   .res InventoryLen
+;  InventoryAmount:         .res InventoryLen
+;  InventoryPerLevelAmount: .res InventoryLen
+;  InventoryEnd:
+;GameStateLen = 2+10*4 ; update if more stuff is added. Just coins and inventory.
+;  InventoryPage: .res 1 ; 0 normally, InventoryLen if second page
 
   PlayerAbilityVar: .res 1  ; used to keep track of ability-related things
   PlayerNeedsGround: .res 1 ; sets to zero when the player touches the ground
   PlayerRidingSomethingLast: .res 1 ; player was riding something last frame
 
 ; Checkpoint information
-  CheckpointGameState:   .res GameStateLen
+;  CheckpointGameState:   .res GameStateLen
   CheckpointLevelNumber: .res 1
   CheckpointX:           .res 1
   CheckpointY:           .res 1

@@ -1,5 +1,5 @@
 .include "nes.inc"
-.include "mmc1.inc"
+.include "mapper.inc"
 .include "global.inc"
 
 .segment "CODE"
@@ -45,8 +45,6 @@ clear_zp:
   inx
   bne clear_zp
 
-  sta $4444
-
   ; Initialize the mapper
   lda #$80   ; Mode
   sta $5000
@@ -62,6 +60,12 @@ clear_zp:
 vwait2:
   bit PPUSTATUS  ; After the second vblank, we know the PPU has
   bpl vwait2     ; fully stabilized.
+
+  lda #VBLANK_NMI|BG_0000|OBJ_1000
+  sta PPUCTRL
+  lda #0
+  .import DecompressLevel
+  jsr DecompressLevel
 
   lda #<.bank(main)
   jsr setPRGBank

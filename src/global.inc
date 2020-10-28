@@ -10,6 +10,7 @@
 .global OAM
 .global main, nmi_handler, irq_handler
 .globalzp cur_keys, new_keys, oam_used
+.global WaitVblank
 
 ; bg.s
 .global draw_bg
@@ -18,7 +19,7 @@
 .global init_player, move_player
 
 ; pads.s
-.global read_pads
+.global ReadController
 
 ; ppuclear.s
 .global ppu_clear_nt, ppu_clear_oam, ppu_screen_on

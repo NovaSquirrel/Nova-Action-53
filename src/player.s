@@ -1,5 +1,5 @@
 .include "nes.inc"
-.include "mmc1.inc"
+.include "mapper.inc"
 .include "global.inc"
 
 .segment "ZEROPAGE"
@@ -45,7 +45,7 @@ RIGHT_WALL = 224
 
   ; Acceleration to right: Do it only if the player is holding right
   ; on the Control Pad and has a nonnegative velocity.
-  lda cur_keys
+  lda keydown
   and #KEY_RIGHT
   beq notRight
   lda player_dxlo
@@ -79,7 +79,7 @@ RIGHT_WALL = 224
 
   ; Acceleration to left: Do it only if the player is holding left
   ; on the Control Pad and has a nonpositive velocity.
-  lda cur_keys
+  lda keydown
   and #KEY_LEFT
   beq notLeft
   lda player_dxlo
@@ -265,7 +265,7 @@ f7_not_flipped:
   sta draw_x_left
 not_frame_7:
 
-  ldx oam_used
+  ldx OamPtr
 rowloop:
   ldy #2              ; Y: remaining width on this row in 8px units
   lda row_first_tile
@@ -310,7 +310,7 @@ tileloop:
   dec rows_left
   bne rowloop
 
-  stx oam_used
+  stx OamPtr
   jmp bankrts
 .endproc
 

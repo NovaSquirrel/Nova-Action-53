@@ -1,5 +1,8 @@
 ;
-; UNROM driver for NES
+; Action 53 mapper driver for NES
+; by NovaSquirrel
+;
+; Based on UNROM driver for NES
 ; Copyright 2011-2015 Damian Yerrick
 ;
 ; Copying and distribution of this file, with or without
@@ -8,7 +11,7 @@
 ; code copies.  This file is offered as-is, without any warranty.
 ;
 
-.include "mmc1.inc"  ; implements a subset of the same interface
+.include "mapper.inc"
 .import nmi_handler, reset_handler, irq_handler, bankcall_table
 
 .segment "INESHDR"
@@ -37,6 +40,13 @@ bankcallsaveA: .res 1
   ldy #$01
   sty $5000 ; Register select
   sta lastPRGBank
+  sta $8000 ; Register value
+  rts
+.endproc
+
+.proc setCHRBank
+  ldy #$00
+  sty $5000 ; Register select
   sta $8000 ; Register value
   rts
 .endproc

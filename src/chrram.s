@@ -8,7 +8,7 @@
 ; code copies.  This file is offered as-is, without any warranty.
 ;
 .include "nes.inc"
-.include "mmc1.inc"
+.include "mapper.inc"
 .export load_chr_ram_far
 
 .segment "BANK01"
@@ -21,6 +21,8 @@ template_chr:
 .proc load_chr_ram_far
 srclo = 0
 srchi = 1
+  setCHRBankMacro ; Reset to the first bank
+
   lda #<template_chr
   sta srclo
   lda #>template_chr
@@ -38,6 +40,7 @@ loop:
   inc srchi  ; move on to the next set of 256 bytes of CHR
   dex
   bne loop
+
   jmp bankrts
 .endproc
 

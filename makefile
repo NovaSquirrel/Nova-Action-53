@@ -18,7 +18,8 @@ version = 0.01
 # PRG ROM.  If it gets too long for one line, you can add a backslash
 # (the \ character) at the end of the line and continue on the next.
 objlist = main init bg player leveldata levelcommandtable \
-pads ppuclear mapper chrram bankcalltable memory blockdata blockcode
+pads ppuclear mapper chrram bankcalltable memory blockdata blockcode \
+levelload
 
 AS65 = ca65
 LD65 = ld65
@@ -93,7 +94,7 @@ levels := $(wildcard levels/*.json)
 map.txt $(title).nes: linker.cfg $(objlisto)
 	$(LD65) -o $(title).nes --dbgfile $(title).dbg -m map.txt -C $^
 
-$(objdir)/%.o: $(srcdir)/%.s $(srcdir)/nes.inc $(srcdir)/global.inc $(srcdir)/mmc1.inc
+$(objdir)/%.o: $(srcdir)/%.s $(srcdir)/nes.inc $(srcdir)/global.inc $(srcdir)/mapper.inc
 	$(AS65) $(CFLAGS65) $< -o $@
 
 $(objdir)/%.o: $(objdir)/%.s

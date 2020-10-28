@@ -1,5 +1,5 @@
 .include "nes.inc"
-.include "mmc1.inc"
+.include "mapper.inc"
 .include "global.inc"
 
 .segment "BlockCode"
