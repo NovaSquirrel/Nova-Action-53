@@ -64,8 +64,8 @@ vwait2:
   lda #VBLANK_NMI|BG_0000|OBJ_1000
   sta PPUCTRL
   lda #0
-  .import DecompressLevel
-  jsr DecompressLevel
+  .import LoadLevel
+  jsr LoadLevel
 
   lda #<.bank(main)
   jsr setPRGBank

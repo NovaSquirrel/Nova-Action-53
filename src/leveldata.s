@@ -46,27 +46,27 @@
   .byt $f1, NewX
 .endmacro
 
-.macro LWriteCol Col1, Col2, Col3
-  .ifnblank Col3
-    .byt $f4
-    .byt Col1, Col2, Col3
-  .else
-    .ifnblank Col2
-      .byt $f3
-      .byt Col1, Col2
-    .else
-      .byt $f2
-      .byt Col1
-    .endif
-  .endif
-.endmacro
-
 .macro LXMinus16
-  .byt $f5
+  .byt $f2
 .endmacro
 
 .macro LXPlus16
-  .byt $f6
+  .byt $f3
+.endmacro
+
+.macro LWriteCol Col1, Col2, Col3
+  .ifnblank Col3
+    .byt $f5
+    .byt Col1, Col2, Col3
+  .else
+    .ifnblank Col2
+      .byt $f4
+      .byt Col1, Col2
+    .else
+      .byt $f3
+      .byt Col1
+    .endif
+  .endif
 .endmacro
 
 LSpecialCmd = $f7

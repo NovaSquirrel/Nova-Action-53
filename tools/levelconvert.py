@@ -378,9 +378,9 @@ else:
 			table_file.write("  .byt Block::%s\n" % i)
 			index += 1
 
-		table_file.write(".export FirstRectType, SingleRectList\n")
+		table_file.write(".export FirstRectType, SimpleRectList\n")
 		table_file.write("FirstRectType = %d\n" % index)
-		table_file.write("SingleRectList:\n")
+		table_file.write("SimpleRectList:\n")
 		for i in ListRectTypes:
 			table_file.write("  .byt Block::%s\n" % i)
 			index += 1

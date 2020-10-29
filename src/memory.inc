@@ -26,11 +26,10 @@ MaxDelayedMetaEdits = 10
   .globalzp ScrollLevelPointer
 
   ; variables for decoding objects during level decompression
-  DecodeObjectType   = TempSpace+0 ; object type ID
-  DecodeObjectXY     = TempSpace+1 ; X and Y position of the block
-  DecodeObjectBlock  = TempSpace+2 ; block ID to rectangle fill with
-  DecodeObjectWidth  = TempSpace+3 ; width to rectangle fill with
-  DecodeObjectHeight = TempSpace+4 ; height to rectangle fill with
+  DecodeObjectBlock  = TempSpace+0 ; block ID to rectangle fill with
+  DecodeObjectY      = TempSpace+1 ; Y position of the block
+  DecodeObjectWidth  = TempSpace+2 ; width to rectangle fill with
+  DecodeObjectHeight = TempSpace+3 ; height to rectangle fill with
 
   .globalzp OamPtr
   .globalzp TempVal, TempX, TempY
