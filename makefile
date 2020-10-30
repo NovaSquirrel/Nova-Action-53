@@ -122,6 +122,7 @@ $(srcdir)/levelcommandtable.s: tools/levelconvert.py
 	$(PY) tools/levelconvert.py generate_table
 $(srcdir)/leveldata.s: $(srcdir)/levelcommandtable.s tools/levelconvert.py $(levels) $(srcdir)/blockenum.s
 	$(PY) tools/levelconvert.py levels
+$(srcdir)/blockcode.s: $(srcdir)/blockenum.s
 $(srcdir)/blockenum.s: tools/blocks.txt tools/makeblocks.py
 	$(PY) tools/makeblocks.py
 $(srcdir)/blockdata.s: $(srcdir)/blockenum.s

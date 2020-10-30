@@ -19,6 +19,20 @@ solid
 palette green
 q $47
 
++TerrainSingle
+autotile AutotileTerrain
+solid
+palette green
+t $45 $46
+t $55 $56
+
++TerrainSingleInside
+autotile AutotileTerrain
+solid
+palette green
+t $59 $5b
+t $5a $5b
+
 +TerrainLeft
 solid
 palette green
@@ -30,6 +44,18 @@ solid
 palette green
 t $47 $46
 t $57 $56
+
++TerrainLeftSide
+solid
+palette green
+t $59 $5a
+t $59 $5a
+
++TerrainRightSide
+solid
+palette green
+t $5a $5b
+t $5a $5b
 
 +TerrainInside
 solid
@@ -281,7 +307,7 @@ palette gray
 t $34 $35
 t $2f $2f
 
-+FloatingPlatormMiddle
++FloatingPlatformMiddle
 solid_top
 palette gray
 t $34 $34

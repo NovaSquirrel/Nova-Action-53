@@ -113,7 +113,7 @@ outfile.write(".endproc\n\n")
 
 outfile.write('.proc BlockFlags\n')
 for b in all_blocks:
-	outfile.write('  .byt $%x|BlockClass::%s ; %s\n' % (b['solid'] * 0x80 + b['solid_top'] * 0x40, b['class'], b['name']))
+	outfile.write('  .byt $%x|BlockClass::%s ; %s\n' % (b['solid'] * 0x80 + b['solid_top'] * 0x40 + (b['autotile'] != None) * 0x20, b['class'], b['name']))
 outfile.write('.endproc\n\n')
 
 # Write all interaction type tables

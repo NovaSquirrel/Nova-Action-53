@@ -96,6 +96,7 @@ forever:
 .endproc
 
 .proc load_main_palette
+  jsr WaitVblank
   ; seek to the start of palette memory ($3F00-$3F1F)
   ldx #$3F
   stx PPUADDR
