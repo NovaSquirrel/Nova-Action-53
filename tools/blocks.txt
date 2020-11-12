@@ -335,7 +335,7 @@ palette gray
 t $37 $38
 t $2f $2f
 
-+FloatingPlatormMiddleFallthrough
++FloatingPlatformMiddleFallthrough
 class Fallthrough
 solid_top
 palette gray

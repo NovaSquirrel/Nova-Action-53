@@ -234,9 +234,9 @@ NotStone:
 .proc AutotileFloatingPlatform
   lda #0
   sta 0
-  lda ScreenBufferRight,x
-  jsr IsPlatform
   lda ScreenBufferLeft,x
+  jsr IsPlatform
+  lda ScreenBufferRight,x
   jsr IsPlatform
   lda 0
   add #Block::FloatingPlatform
@@ -256,9 +256,9 @@ IsPlatform:
 .proc AutotileFloatingPlatformFallthrough
   lda #0
   sta 0
-  lda ScreenBufferRight,x
-  jsr IsPlatform
   lda ScreenBufferLeft,x
+  jsr IsPlatform
+  lda ScreenBufferRight,x
   jsr IsPlatform
   lda 0
   add #Block::FloatingPlatformFallthrough

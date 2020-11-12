@@ -35,8 +35,7 @@ OAM = $0200
   rti
 .endproc
 
-.segment "BANK02"
-
+.code
 .proc main
 
   ; Now the PPU has stabilized, and we're still in vblank.  Copy the
@@ -51,7 +50,12 @@ OAM = $0200
 
   ; Then load the nametable (background map).
   jsr draw_bg
-  
+
+  .import RenderLevelScreens
+  lda #<.bank(RenderLevelScreens)
+  jsr setPRGBank
+  jsr RenderLevelScreens  
+
   ; Set up game variables, as if it were the start of a new level.
   jsr init_player
 

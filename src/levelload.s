@@ -282,7 +282,6 @@ HasAutotile = $20
   sta CurrentScreen
 ScreenLoop:
   ldx CurrentScreen
-  ; assert(0)
   dex
   stx PPUADDR
   lda #$f0 ; Go back one column
@@ -330,7 +329,7 @@ ProcessLoop:
   cmp #16
   bne ScreenLoop
 
-  setCHRBankMacro 0
+  setCHRBankMacro
   rts
 .endproc
 

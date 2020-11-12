@@ -34,7 +34,7 @@ def FindCommandFor(type, w, h, x, y):
 		return "LRect RectEnum::%s, %d, %d, %d, %d" % (type, x, y, w-1, h-1)
 	elif type in LineTypes:
 		if w == 1 and h <= 16:
-			return "LTall LineEnum::%s, %d, %d, %d" % (type, x, y-1, h-1)
+			return "LTall LineEnum::%s, %d, %d, %d" % (type, x, y, h-1)
 		if h == 1 and w <= 16:
 			return "LWide LineEnum::%s, %d, %d, %d" % (type, x, y, w-1)
 		return "LBigRect LineEnum::%s, %d, %d, %d, %d" % (type, x, y, w-1, h-1)

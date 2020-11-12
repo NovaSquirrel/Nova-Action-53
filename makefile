@@ -19,7 +19,7 @@ version = 0.01
 # (the \ character) at the end of the line and continue on the next.
 objlist = main init bg player leveldata levelcommandtable \
 pads ppuclear mapper chrram bankcalltable memory blockdata blockcode \
-levelload
+levelload leveldraw global
 
 AS65 = ca65
 LD65 = ld65

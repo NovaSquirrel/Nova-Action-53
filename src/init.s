@@ -67,8 +67,6 @@ vwait2:
   .import LoadLevel
   jsr LoadLevel
 
-  lda #<.bank(main)
-  jsr setPRGBank
   jmp main
 .endproc
 
