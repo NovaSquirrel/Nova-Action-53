@@ -8,6 +8,8 @@
   seed: .res 4
   ScrollX: .res 2
 
+  LevelBlockPtr: .res 2
+
   ActorType:       .res ActorLen ; TTTTTTTD, Type, Direction
   EnemyRightEdge:   .res 1     ; Usually $f0 but can be $70 for 8 pixel wide enemies
 
@@ -185,6 +187,7 @@ LevelZeroWhenLoad_Start:
 LevelZeroWhenLoad_End:
 
   PlayerAbility:      .res 1     ; current ability, see the AbilityType enum
+  ChipsNeeded:        .res 1
 
 ; Current game state (saved in checkpoints)
 CurrentGameState:
@@ -201,6 +204,7 @@ CurrentGameState:
 
   PlayerAbilityVar: .res 1  ; used to keep track of ability-related things
   PlayerNeedsGround: .res 1 ; sets to zero when the player touches the ground
+  PlayerRidingSomething: .res 1
   PlayerRidingSomethingLast: .res 1 ; player was riding something last frame
 
 ; Checkpoint information
@@ -212,6 +216,14 @@ CurrentGameState:
 
   LevelMusic:         .res 1  ; music number for levels
   PlayerJumpCancel: .res 1
+  JumpGracePeriod:  .res 1
   PlayerSwimming:   .res 1
+  CoinShowTimer:    .res 1
 
-
+  PlayerDrawX: .res 1
+  PlayerDrawY: .res 1
+  AttackKeyDownSnapshot: .res 1
+  SavedRunStyle: .res 1
+  SavedShootWhileWalking: .res 1
+  PlayerLadderMoveFrame: .res 1
+  DownLockFromRideable: .res 1

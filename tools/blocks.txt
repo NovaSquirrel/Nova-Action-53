@@ -155,6 +155,7 @@ q $0e
 
 +PushableBlock
 when Side, BlockPushableBlock
+class SpecialWall
 palette gray
 solid
 t $06 $07

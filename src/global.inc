@@ -27,4 +27,79 @@
 ; bankcall ids
 .globalzp draw_player_sprite, load_chr_ram
 
+; global.s
+.global GetLevelColumnPtr
+
+.macro RealXPosToScreenPos RealLo, RealHi, Store
+  lda RealLo
+  sub ScrollX+0
+  sta Store
+
+  lda RealHi
+  sbc ScrollX+1
+  .repeat 4
+    lsr
+    ror Store
+  .endrep
+.endmacro
+
+.macro RealYPosToScreenPos RealLo, RealHi, Store
+  lda RealLo
+  sta Store
+
+  lda RealHi
+  .repeat 4
+    lsr
+    ror Store
+  .endrep
+.endmacro
+
+.macro RealXPosToScreenPosByX RealLo, RealHi, Store
+  lda RealLo,x
+  sub ScrollX+0
+  sta Store
+
+  lda RealHi,x
+  sbc ScrollX+1
+  .repeat 4
+    lsr
+    ror Store
+  .endrep
+.endmacro
+
+.macro RealYPosToScreenPosByX RealLo, RealHi, Store
+  lda RealLo,x
+  sta Store
+
+  lda RealHi,x
+  .repeat 4
+    lsr
+    ror Store
+  .endrep
+.endmacro
+
+.macro RealXPosToScreenPosByY RealLo, RealHi, Store
+  lda RealLo,y
+  sub ScrollX+0
+  sta Store
+
+  lda RealHi,y
+  sbc ScrollX+1
+  .repeat 4
+    lsr
+    ror Store
+  .endrep
+.endmacro
+
+.macro RealYPosToScreenPosByY RealLo, RealHi, Store
+  lda RealLo,y
+  sta Store
+
+  lda RealHi,y
+  .repeat 4
+    lsr
+    ror Store
+  .endrep
+.endmacro
+
 .endif

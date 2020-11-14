@@ -6,11 +6,12 @@ MaxDelayedMetaEdits = 10
   .globalzp retraces, keydown, keylast, keynew, seed, ScrollX
   .globalzp ActorType
   .globalzp EnemyRightEdge
-  .globalzp PlayerPXL, PlayerPXH, PlayerPYH, PlayerPYH
-  .globalzp PlayerVXL, PlayerVXH, PlayerVYH, PlayerVYH
+  .globalzp PlayerPXL, PlayerPXH, PlayerPYL, PlayerPYH
+  .globalzp PlayerVXL, PlayerVXH, PlayerVYL, PlayerVYH
   .globalzp PlayerWasRunning, PlayerDir, PlayerJumping, PlayerOnGround, PlayerJumpCancelLock, PlayerWalkLock, PlayerDownTimer, PlayerSelectTimer
   .globalzp PlayerHealth, PlayerTailAttack, PlayerAnimationFrame, PlayerTiles, SoundDebounce, ForceControllerBits, ForceControllerTime
   .globalzp ScrollUpdateChunk
+  .globalzp LevelBlockPtr
 
   ; the NES CPU can't access VRAM outside of vblank, so this is a queue
   ; of metatile and byte updates that wait until vblank to trigger
@@ -78,8 +79,16 @@ MaxDelayedMetaEdits = 10
   .global CarryingPickupBlock
   .global LevelZeroWhenLevel_End
   .global PlayerAbility
+  .global ChipsNeeded
 
   .global Coins
   .global PlayerAbilityVar
-  .global PlayerNeedsGround, PlayerRidingSomethingLast
+  .global PlayerNeedsGround, PlayerRidingSomethingLast, PlayerRidingSomething
   .global CheckpointLevelNumber, CheckpointX, CheckpointY, MakeCheckpoint, LevelMusic, PlayerJumpCancel, PlayerSwimming
+  .global JumpGracePeriod
+  .global CoinShowTimer
+  .global PlayerDrawX, PlayerDrawY
+  .global AttackKeyDownSnapshot
+  .global SavedRunStyle, SavedShootWhileWalking
+  .global PlayerLadderMoveFrame
+  .global DownLockFromRideable

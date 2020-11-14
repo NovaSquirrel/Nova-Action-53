@@ -126,3 +126,4 @@ $(srcdir)/blockcode.s: $(srcdir)/blockenum.s
 $(srcdir)/blockenum.s: tools/blocks.txt tools/makeblocks.py
 	$(PY) tools/makeblocks.py
 $(srcdir)/blockdata.s: $(srcdir)/blockenum.s
+$(objdir)/player.o: $(srcdir)/blockenum.s

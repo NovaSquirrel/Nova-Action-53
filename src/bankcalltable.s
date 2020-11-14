@@ -15,6 +15,6 @@
 ; which bank the method is in,
 ; and the entry point within the bank.
 bankcall_table:
-  bankcall_entry draw_player_sprite,    <.bank(draw_player_sprite_far), draw_player_sprite_far
+;  bankcall_entry draw_player_sprite,    <.bank(draw_player_sprite_far), draw_player_sprite_far
   bankcall_entry load_chr_ram,          <.bank(load_chr_ram_far), load_chr_ram_far
 

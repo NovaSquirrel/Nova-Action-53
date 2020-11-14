@@ -1,316 +1,2315 @@
+; Princess Engine
+; Copyright (C) 2014-2018 NovaSquirrel
+;
+; This program is free software: you can redistribute it and/or
+; modify it under the terms of the GNU General Public License as
+; published by the Free Software Foundation; either version 3 of the
+; License, or (at your option) any later version.
+;
+; This program is distributed in the hope that it will be useful, but
+; WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+; General Public License for more details.
+;
+; You should have received a copy of the GNU General Public License
+; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+;
+
 .include "nes.inc"
 .include "mapper.inc"
 .include "global.inc"
+.include "blockenum.s"
+.import BlockFlags
+.import BCD99
 
-.segment "ZEROPAGE"
-; Game variables
-player_xlo:       .res 1  ; horizontal position is xhi + xlo/256 px
-player_xhi:       .res 1
-player_dxlo:      .res 1  ; speed in pixels per 256 s
-player_yhi:       .res 1
-player_facing:    .res 1
-player_frame:     .res 1
-player_frame_sub: .res 1
+M_SOLID_ALL =      %10000000 ; this block is solid on all sides
+M_SOLID_TOP =      %01000000 ; this block is solid only on the top
+M_POST_PROCESS =   %00100000 ; this block needs to be postprocessed
+M_BEHAVIOR =       %00011111 ; mask for the block's behavior only
+BLOCK_CLASS_MASK = M_BEHAVIOR
 
-; constants used by move_player
-; PAL frames are about 20% longer than NTSC frames.  So if you make
-; dual NTSC and PAL versions, or you auto-adapt to the TV system,
-; you'll want PAL velocity values to be 1.2 times the corresponding
-; NTSC values, and PAL accelerations should be 1.44 times NTSC.
-WALK_SPD = 105  ; speed limit in 1/256 px/frame
-WALK_ACCEL = 4  ; movement acceleration in 1/256 px/frame^2
-WALK_BRAKE = 8  ; stopping acceleration in 1/256 px/frame^2
+.segment "BlockCode"
+.export RunPlayer
+.proc RunPlayer
+  jsr UpdateStatus
+  jmp HandlePlayer
+.endproc
 
-LEFT_WALL = 32
-RIGHT_WALL = 224
+NOVA_WALK_SPEED = 2
+NOVA_RUN_SPEED = 4
+JUMP_GRACE_PERIOD_LENGTH = 6
 
-.segment "CODE"
+.proc UpdateStatus
+HealthX = 0
+HealthCount = 1
+  ldy OamPtr
+  lda #15
+  sta HealthX
+  sta OAM_YPOS+(4*0),y
+  sta OAM_YPOS+(4*1),y
+  sta OAM_XPOS+(4*0),y
+  sta OAM_XPOS+(4*2),y
+  lda #15+8
+  sta OAM_YPOS+(4*2),y
+  sta OAM_YPOS+(4*3),y
+  sta OAM_XPOS+(4*1),y
+  sta OAM_XPOS+(4*3),y
+  lda #$4c
+  sta OAM_TILE+(4*0),y
+  lda #$4d
+  sta OAM_TILE+(4*2),y
+  lda #$4e
+  sta OAM_TILE+(4*1),y
+  lda #$4f
+  sta OAM_TILE+(4*3),y
+  lda #OAM_COLOR_0
+  sta OAM_ATTR+(4*0),y
+  sta OAM_ATTR+(4*1),y
+  sta OAM_ATTR+(4*2),y
+  sta OAM_ATTR+(4*3),y
+  tya
+  add #4*4
+  tay
 
-.proc init_player
+; Draw the chip for a chip collecting level if needed
+  lda ChipsNeeded
+  beq :+
+  lda #$5f
+  sta OAM_TILE,y
+  lda #OAM_COLOR_1
+  sta OAM_ATTR+(4*0),y
+  sta OAM_ATTR+(4*1),y
+  sta OAM_ATTR+(4*2),y
+  lda #15
+  sta OAM_YPOS+(4*0),y
+  sta OAM_YPOS+(4*1),y
+  sta OAM_YPOS+(4*2),y
+  lda #15+16
+  sta OAM_XPOS+(4*0),y
+  lda #15+24
+  sta OAM_XPOS+(4*1),y
+  lda #15+32
+  sta OAM_XPOS+(4*2),y
+
+  ldx ChipsNeeded
+  lda BCD99,x
+  pha
+  .repeat 4
+    lsr
+  .endrep
+  add #$40
+  sta OAM_TILE+(4*1),y
+  pla
+  and #$0f
+  add #$40
+  sta OAM_TILE+(4*2),y
+
+; Move OAM pointer forward
+  tya
+  add #12
+  tay
+:
+
+; Draw all hearts needed
+  lda PlayerHealth
+  lsr
+  php
+  sta HealthCount
+Loop:
+  lda HealthCount
+  beq NoMoreHearts
+  lda #$4a
+  jsr MakeHeart
+  dec HealthCount
+  bne Loop
+NoMoreHearts:
+
+  plp ; add a half heart if needed
+  bcc :+
+    lda #$4b
+    jsr MakeHeart
+  :
+
+  sty OamPtr
+  rts
+
+MakeHeart:
+  sta OAM_TILE,y
+  lda HealthX
+  sta OAM_XPOS,y
+  add #8
+  sta HealthX
   lda #0
-  sta player_xlo
-  sta player_dxlo
-  sta player_facing
-  sta player_frame
-  lda #48
-  sta player_xhi
-  lda #192
-  sta player_yhi
+  sta OAM_ATTR,y
+  lda #15+16
+  sta OAM_YPOS,y
+  iny
+  iny
+  iny
+  iny
   rts
 .endproc
 
-;;
-; Moves the player character in response to controller 1.
-.proc move_player
+.proc HandlePlayer
+;OldPlayerPYL = 0
+;OldPlayerPYH = 1
+Temp = 1
+BlockUL = 2
+BlockUR = 3
+BlockLL = 4
+BlockLR = 5
+BlockFootL = TempSpace+1  ; TempSpace is free here because
+BlockFootR = TempSpace+2  ; the buffer isn't filled until after Handleplayer
+FourCorners = 6
+SkipTop = TempSpace+3
+;BlockMiddle = TempSpace+4 - moved to its own variable
+XForMiddle  = TempSpace+5
+OldPlayerSwimming = TempSpace+6
+BottomCMP = 7
+SkipFourCorners = 8
+MaxSpeedLeft = 9
+MaxSpeedRight = 10
+  lda PlayerSwimming
+  sta OldPlayerSwimming
+  lda #0
+  sta PlayerOnGround
+  sta SkipTop
+  sta FourCorners
+  sta SkipFourCorners
+  sta PlayerSwimming
 
-  ; Acceleration to right: Do it only if the player is holding right
-  ; on the Control Pad and has a nonnegative velocity.
-  lda keydown
-  and #KEY_RIGHT
-  beq notRight
-  lda player_dxlo
-  bmi notRight
-  
-    ; Right is pressed.  Add to velocity, but don't allow velocity
-    ; to be greater than the maximum.
-    clc
-    adc #WALK_ACCEL
-    cmp #WALK_SPD
-    bcc :+
-      lda #WALK_SPD
+  lda ForceControllerTime
+  beq :+
+    dec ForceControllerTime
+    lda keydown
+;    and #<~(KEY_LEFT|KEY_RIGHT)
+    ora ForceControllerBits
+    sta keydown
+  :
+
+  lda PlayerWasRunning ; nonzero = B button, only updated when on ground
+  beq :+
+    lda NovaRunSpeedL
+    sta MaxSpeedLeft
+    lda NovaRunSpeedR
+    sta MaxSpeedRight
+    bne NotWalkSpeed
+: lda #<-(NOVA_WALK_SPEED*16)
+  sta MaxSpeedLeft
+  lda #NOVA_WALK_SPEED*16
+  sta MaxSpeedRight
+NotWalkSpeed:
+
+.if 0
+  ; Handle holding and letting go of a balloon
+  lda PlayerHasBalloon
+  beq @NoBalloon
+    ; Lift the player up
+    lda #255
+    sta PlayerVYH
+    lda #<-$10
+    sta PlayerVYL
+
+    ; Let go if pressing A or B, or if too high
+    lda keynew
+    and #KEY_B|KEY_A
+    bne @LetGo
+    lda PlayerHasBalloon ; (but height limit can be removed)
+    bmi :+
+    lda PlayerPYH
+    cmp #$02
+    bcc @LetGo
+:   ; Also if they touch something solid above
+    lda PlayerPXL
+    add #$40
+    lda PlayerPXH
+    adc #0
+    ldy PlayerPYH
+    jsr GetLevelColumnPtr
+    sta BlockLR
+    tax
+    lda BlockFlags,x
+    bmi @LetGo
+    bpl @NoLetGo
+@LetGo:
+    lda #0
+    sta PlayerHasBalloon
+    jsr FindFreeObjectY
+    bcc @NoSlotFree
+    lda #Enemy::POOF*2
+    sta ObjectF1,y
+
+    ; Copy the X over with an offset
+    ldx PlayerDir
+    lda PlayerPXL
+    add BalloonOffsetLo,x
+    sta ObjectPXL,y
+    lda PlayerPXH
+    adc BalloonOffsetHi,x
+    sta ObjectPXH,y
+    ; Copy other stuff
+    lda PlayerPYL
+    sub #$80
+    sta ObjectPYL,y
+    lda PlayerPYH
+    sbc #0
+    sta ObjectPYH,y
+    lda #2
+    sta ObjectF2,y
+    lda #0
+    sta ObjectVYL,y
+    sta ObjectVYH,y
+    sta ObjectTimer,y
+  @NoSlotFree:
+@NoLetGo:
+@NoBalloon:
+.endif
+
+; Water physics
+  ldy BlockMiddle
+  lda BlockFlags,y
+  and #BLOCK_CLASS_MASK
+  cmp #BlockClass::Water
+  bne NotWater
+IsWater:
+    lda #0
+    sta PlayerWasRunning
+    inc PlayerSwimming
+
+    lda #0
+    sta PlayerVYL
+    sta PlayerVYH
+
+    lda keydown ; A goes up fast
+    and #KEY_A
+    beq :+
+      lda #<(-$40)
+      sta PlayerVYL
+      lda #>(-$40)
+      sta PlayerVYH
     :
-    sta player_dxlo
-    lda player_facing  ; Set the facing direction to not flipped 
-    and #<~$40         ; turn off bit 6, leave all others on
-    sta player_facing
-    jmp doneRight
-  notRight:
+    lda keydown ; up goes up
+    and #KEY_UP
+    beq :+
+      lda #<(-$20)
+      sta PlayerVYL
+      lda #>(-$20)
+      sta PlayerVYH
+    :
+    lda keydown ; down goes down
+    and #KEY_DOWN
+    beq :+
+      lda #<($20)
+      sta PlayerVYL
+      lda #>($20)
+      sta PlayerVYH
+    :
+    jsr OfferJump
 
-    ; Right is not pressed.  Brake if headed right.
-    lda player_dxlo
-    bmi doneRight
-    cmp #WALK_BRAKE
-    bcs notRightStop
-    lda #WALK_BRAKE+1  ; add 1 to compensate for the carry being clear
-  notRightStop:
-    sbc #WALK_BRAKE
-    sta player_dxlo
-  doneRight:
+    jmp PlayerIsntOnLadder
+  NotWater:
 
-  ; Acceleration to left: Do it only if the player is holding left
-  ; on the Control Pad and has a nonpositive velocity.
+  lda PlayerOnLadder       ; skip gravity if on a ladder
+  bne HandleLadderClimbing
+  ; add gravity
+  lda PlayerVYH
+  bmi GravityAddOK
+  lda PlayerVYL
+  cmp #$60
+  bcs SkipGravity
+GravityAddOK:
+  lda PlayerVYL
+  add #4
+  sta PlayerVYL
+  bcc SkipGravity
+    inc PlayerVYH
+SkipGravity:
+  jmp PlayerIsntOnLadder
+HandleLadderClimbing:
+  lda #0
+  sta PlayerVYL
+  sta PlayerVYH
+  jsr OfferJump
+  lda keydown
+  and #KEY_UP
+  beq :+
+    lda PlayerPYL
+    sub #$20
+    sta PlayerPYL
+    subcarry PlayerPYH
+  :
+  lda keydown
+  and #KEY_DOWN
+  beq :+
+    lda PlayerPYL
+    add #$20
+    sta PlayerPYL
+    addcarry PlayerPYH
+  :
+PlayerIsntOnLadder:
+
+  ; apply gravity
+  lda PlayerPYL
+  add PlayerVYL
+  sta PlayerPYL
+  lda PlayerPYH
+  adc PlayerVYH
+  sta PlayerPYH
+SkipApplyGravity:
+
+  ; Handle the player going off the top and bottom of the screen
+  ; (A is still PlayerPYH)
+  cmp #14
+  bcc NotOffTopBottom
+  ; Warp the player if needed
+  ldy #0
+  lda PlayerPXH ; get screen number only
+  lsr
+  lsr
+  lsr
+  lsr
+  ldx PlayerPYH
+  bmi :+
+    ora #$10 ; move onto the LevelLinkDown if on the bottom side
+    ldy #1
+: tax
+  lda LevelLinkUp,x
+  bne LevelLinkNonzero
+; Respond to the screen that's linked to itself:
+
+  lda PlayerPYH ; don't kill if on the top side of the screen
+  bmi :+
+  lda PlayerHasBalloon
+  bne :+
+
+;  lda #InventoryItem::AUTO_BALLOON
+;  jsr InventoryHasItem
+;  bcc DieInPit
+;  inc PlayerHasBalloon
+;  jsr RemoveOneItem
+;  jmp NotOffTopBottom
+
+DieInPit:
+  lda #0
+  sta PlayerHealth
+
+  jmp NotOffTopBottom
+LevelLinkNonzero:
+  ; A = item from LevelLinkUp or LevelLinkDown
+  asl
+  asl
+  asl
+  asl
+  add PlayerPXH
+  sta PlayerPXH
+
+  inc NeedLevelRerender
+  inc JustTeleported
+  lda LevelLinkStartYL,y
+  sta PlayerPYL
+  lda LevelLinkStartYH,y
+  sta PlayerPYH
+
+  ; Clear out the delayed metatile change list
+  ldx #MaxDelayedMetaEdits-1
+ClearDelayed:
+  lda DelayedMetaEditIndexHi,x
+  beq @NotPresent
+    lda DelayedMetaEditIndexHi,x
+    sta LevelBlockPtr+1
+    lda DelayedMetaEditIndexLo,x
+    sta LevelBlockPtr+0
+    lda DelayedMetaEditType,x
+    ldy #0
+    sta (LevelBlockPtr),y
+    tya ; A = 0
+    sta DelayedMetaEditIndexHi,x ; Don't need to clear the rest
+@NotPresent:
+  dex
+  bpl ClearDelayed
+NotOffTopBottom:
+
+  countdown PlayerJumpCancelLock
+  countdown PlayerWalkLock
+  countdown PlayerInvincible
+  countdown JumpGracePeriod
+
+  lda PlayerLeftRightLock
+  beq :+
+    lda keydown
+    and #<~(KEY_LEFT|KEY_RIGHT)
+    sta keydown
+    dec PlayerLeftRightLock
+  :
+
+.if 0
+  ; Mirror ability automatically rapid-fires if you hold down the button
+  lda PlayerAbility
+  cmp #AbilityType::MIRROR
+  bne :+
+    lda keydown
+    and #KEY_B
+    ora keynew
+    sta keynew
+    lda keylast
+    and #<~KEY_B
+    sta keylast
+  :
+.endif
+
+  lda PlayerTailAttack
+  beq NoTail
+    inc PlayerTailAttack
+    lda PlayerTailAttack
+    cmp #6 ; launch attack
+    bne :+
+      jsr DoTailAttack
+    :
+    lda PlayerTailAttack
+    cmp #14
+    bcc :+
+      lda #0
+      sta PlayerTailAttack
+    :
+    jmp SkipTail
+NoTail:
+  ; shooting while moving left/right okay if explicitly enabled, if on tap run, or if jumping
+  lda SavedShootWhileWalking
+  bne OkayIfLeftRight
+  lda SavedRunStyle
+  bne OkayIfLeftRight
+  lda PlayerJumping
+  bne OkayIfLeftRight
+  lda keylast
+  and #KEY_B|KEY_LEFT|KEY_RIGHT
+  bne :+
+OkayIfLeftRight:
+  lda keynew+1
+  and #KEY_SNES_X | KEY_SNES_A
+  bne PressedAOrX
+  lda keynew
+  and #KEY_B
+  beq :+
+PressedAOrX:
+    lda keydown
+    sta AttackKeyDownSnapshot
+    lda keydown+1
+    sta AttackKeyDownSnapshot+1
+
+    lda PlayerPYH
+    cmp #15
+    bcs :+
+;    lda #SFX::TAIL_WHOOSH
+;    jsr PlaySound
+    inc PlayerTailAttack
+  :
+SkipTail:
+
+  lda PlayerVYH
+  bpl :+
+    lda PlayerJumpCancel
+    bne :+
+    lda keydown        ; cancel a jump
+    and #KEY_A
+    bne :+
+      lda PlayerJumpCancelLock
+      bne :+
+        inc PlayerJumpCancel
+
+        ; Forced jump like when climbing is handled differently
+        lda ForceControllerTime
+        beq @IsNotForce
+        lda #0
+        sta PlayerVYL
+        sta PlayerVYH
+        beq :+
+@IsNotForce:
+
+        lda PlayerVYL
+        cmp #<(-$20)
+        bcs :+
+        lda #>(-$20)
+        sta PlayerVYH
+        lda #<(-$20)
+        sta PlayerVYL
+  :
+
+  lda PlayerJumpCancel
+  beq :+
+    lda PlayerVYH
+    sta PlayerJumpCancel
+  :
+ 
+  lda PlayerWalkLock
+  bne NotWalk
+  ; handle left and right
   lda keydown
   and #KEY_LEFT
-  beq notLeft
-  lda player_dxlo
-  beq isLeft
-    bpl notLeft
-  isLeft:
-
-    ; Left is pressed.  Add to velocity.
-    lda player_dxlo
-    sec
-    sbc #WALK_ACCEL
-    cmp #256-WALK_SPD
-    bcs :+
-      lda #256-WALK_SPD
-    :
-    sta player_dxlo
-    lda player_facing  ; Set the facing direction to flipped
-    ora #$40
-    sta player_facing
-    jmp doneLeft
-
-    ; Left is not pressed.  Brake if headed left.
-  notLeft:
-    lda player_dxlo
-    bpl doneLeft
-    cmp #256-WALK_BRAKE
-    bcc notLeftStop
-    lda #256-WALK_BRAKE
-  notLeftStop:
-    adc #8-1
-    sta player_dxlo
-  doneLeft:
-
-  ; In a real game, you'd respond to A, B, Up, Down, etc. here.
-
-  ; Move the player by adding the velocity to the 16-bit X position.
-  lda player_dxlo
-  bpl player_dxlo_pos
-    ; if velocity is negative, subtract 1 from high byte to sign extend
-    dec player_xhi
-  player_dxlo_pos:
-  clc
-  adc player_xlo
-  sta player_xlo
-  lda #0          ; add high byte
-  adc player_xhi
-  sta player_xhi
-
-  ; Test for collision with side walls
-  cmp #LEFT_WALL-4
-  bcs notHitLeft
-    lda #LEFT_WALL-4
-    sta player_xhi
-    lda #0
-    sta player_dxlo
-    beq doneWallCollision
-  notHitLeft:
-
-  cmp #RIGHT_WALL-12
-  bcc notHitRight
-    lda #RIGHT_WALL-13
-    sta player_xhi
-    lda #0
-    sta player_dxlo
-  notHitRight:
-
-  ; Additional checks for collision, if needed, would go here.
-doneWallCollision:
-
-  ; Animate the player
-  ; If stopped, freeze the animation on frame 0
-  lda player_dxlo
-  bne notStop1
-    lda #$C0
-    sta player_frame_sub
-    lda #0
-    beq have_player_frame
-  notStop1:
-
-  ; Take absolute value of velocity (negate it if it's negative)
-  bpl player_animate_noneg
-    eor #$FF
-    clc
-    adc #1
-  player_animate_noneg:
-
-  lsr a  ; Multiply abs(velocity) by 5/16
-  lsr a
-  sta 0
-  lsr a
-  lsr a
-  adc 0
-
-  ; And 16-bit add it to player_frame, mod $600  
-  adc player_frame_sub
-  sta player_frame_sub
-  lda player_frame
-  adc #0  ; add only the carry
-
-  ; Wrap from $800 (after last frame of walk cycle)
-  ; to $100 (first frame of walk cycle)
-  cmp #8  ; frame 0: still; 1-7: scooting
-  bcc have_player_frame
+  beq NotLeft
     lda #1
-  have_player_frame:
+    sta PlayerDir
+    lda PlayerVXL
+    cmp MaxSpeedLeft ; can be either run speed or walk speed
+    beq NotLeft
+    cmp #<-(NOVA_RUN_SPEED*16)
+    beq NotLeft
 
-  sta player_frame
+    lda PlayerVXL
+    bne :+
+       dec PlayerVXH
+  : sub NovaAccelSpeed
+    sta PlayerVXL
+NotLeft:
+
+  lda keydown
+  and #KEY_DOWN
+  beq NotDown
+    lda PlayerDownTimer
+    cmp #60
+    bcs YesDown
+    inc PlayerDownTimer
+    bne YesDown
+  NotDown:
+   lda #0
+   sta PlayerDownTimer
+   sta DownLockFromRideable
+  YesDown:
+
+  lda keydown
+  and #KEY_RIGHT
+  beq NotRight
+    lda #0
+    sta PlayerDir
+    lda PlayerVXL
+    cmp MaxSpeedRight ; can be either run speed or walk speed
+    beq NotRight
+    cmp #NOVA_RUN_SPEED*16
+    beq NotRight
+
+    lda PlayerVXL
+    add NovaAccelSpeed
+    sta PlayerVXL
+    bne NotRight
+      inc PlayerVXH
+NotRight:
+NotWalk:
+
+  lda NovaDecelSpeed ; adjust the deceleration speed if you're trying to turn around
+  sta Temp
+.if 1
+  lda keydown
+  and #KEY_LEFT
+  beq :+
+    lda PlayerVXH
+    bmi IsMoving
+    lsr Temp
+  :
+  lda keydown
+  and #KEY_RIGHT
+  beq :+
+    lda PlayerVXL
+    ora PlayerVXH
+    beq Stopped
+    lda PlayerVXH
+    bpl IsMoving
+    lsr Temp
+  :
+.endif
+;  lda keydown
+;  and #KEY_LEFT|KEY_RIGHT
+;  bne IsMoving
+    lda PlayerVXL
+    ora PlayerVXH
+    beq IsMoving
+      lda PlayerVXH ; if negative, make positive
+      and #128
+      sta 0
+      beq :+
+        neg16 PlayerVXL, PlayerVXH
+      :
+
+      lda PlayerVXL
+      sub Temp ; Deceleration speed
+      sta PlayerVXL
+      bcs @NotCarry
+        dec PlayerVXH
+        bpl @NotCarry
+          lda #0
+          sta PlayerVXH
+          sta PlayerVXL
+  @NotCarry:
+
+      lda 0   ; if it was negative make negative again
+      beq :+
+        neg16 PlayerVXL, PlayerVXH
+      :
+Stopped:
+IsMoving:
+
+; if the player is moving too fast for the walk or run, decelerate
+   ldy PlayerVXH ; test if the X speed is negative by checking sign of high byte
+   bpl :+        ; 
+     neg16 PlayerVXL, PlayerVXH ; take absolute value
+   :
+   lda PlayerVXL
+   cmp MaxSpeedRight
+   beq NoFixWalkSpeed ; if at or less than the max speed, don't fix
+   bcc NoFixWalkSpeed
+   sub NovaDecelSpeed ; \
+   sta PlayerVXL      ;  decrease by deceleration speed and carry over to the high byte
+   subcarry PlayerVXH ; /
+NoFixWalkSpeed:
+   cpy #128 ; Y still holds old X velocity high byte. check if it was negative before
+   bcc :+
+     neg16 PlayerVXL, PlayerVXH ; fix the X velocity back to being negative
+   :
+; walk speed now fixed if needed
+
+  ; apply speed without caring if it's gonna push us into a wall or not
+  lda PlayerPXL
+  add PlayerVXL
+  sta PlayerPXL
+  lda PlayerPXH
+  adc PlayerVXH
+  sta PlayerPXH
+
+  ; ------- FOUR CORNER COLLISION DETECTION -------
+  ; http://pineight.com/mw/index.php?title=Four-corner_collision_detection
+
+  ; Don't react to collision if off the top of the screen
+  lda PlayerPYH
+  cmp #255
+  bne :+
+    lda #0
+    sta BlockUL
+    sta BlockUR
+    inc SkipTop
+    bne TopWasSkipped
+  :
+  lda PlayerPYH
+  bpl :+
+    jsr CheckMiddle ; most of this is unused except for checking for ceiling barriers
+    jmp SkipFourCornersEntirely
+  :
+TopWasSkipped:
+
+  lda #M_SOLID_ALL
+  sta BottomCMP
+  lda PlayerVYH
+  bmi :+
+    lda #0
+    sta PlayerJumping
+    lda #M_SOLID_TOP
+    sta BottomCMP
+  :
+
+  jsr CheckMiddle
+
+  ; A is going to get overwritten now so take this opportunity to update PlayerLocationNow/Last
+  lda PlayerLocationNow
+  sta PlayerLocationLast
+  lda LevelBlockPtr
+  sta PlayerLocationNow
+
+  ; now check if it's a block with special behavior
+  cpy #BlockFirstInside
+  bcc DoneCheckMiddle
+  cpy #BlockLastInside+1
+  bcs DoneCheckMiddle
+  tya ; Y contains the block ID, copy it back
+  ldy TempSpace
+  jsr DoSpecialMisc
+DoneCheckMiddle:
+
+  lda SkipTop
+  bne SkipTheTop
+  ; top
+  lda PlayerPYL
+  add #<(8*16)
+  lda PlayerPYH
+  adc #>(8*16)
+  pha ; save Y index so DoSpecialWall isn't required to preserve it
+  tay
+  lda PlayerPXH
+  jsr GetLevelColumnPtr
+  sta BlockUL
+  jsr DoCollectible
+  tax
+  lda BlockFlags,x
+  cmp #$80
+  rol FourCorners ; rotate in the solidity bit
+  and #<~M_POST_PROCESS ; erase the postprocess bit
+  cmp #M_SOLID_ALL|M_SOLID_TOP|BlockClass::SpecialWall
+  bne :+
+    lda BlockUL
+    jsr DoSpecialWall
+  :
+  pla ; get Y index back
+  tay
+  lda #$70
+  add PlayerPXL            ; right side
+  lda PlayerPXH
+  adc #0
+  jsr GetLevelColumnPtr
+  sta BlockUR
+  jsr DoCollectible
+  tax
+  lda BlockFlags,x
+  cmp #$80
+  rol FourCorners ; rotate in the solidity bit
+  and #<~M_POST_PROCESS ; erase the postprocess bit
+  cmp #M_SOLID_ALL|M_SOLID_TOP|BlockClass::SpecialWall
+  bne :+
+    lda BlockUR
+    jsr DoSpecialWall
+  :
+SkipTheTop:
+
+  ;bottom
+  lda PlayerPYL
+  add #<(24*16)
+  lda PlayerPYH
+  adc #>(24*16)
+  tay
+  lda #$20 ; left side
+  add PlayerPXL            ; left side
+  lda PlayerPXH
+  adc #0
+  jsr GetLevelColumnPtr
+  sta BlockLL
+  jsr DoCollectible
+  jsr DoSpecialGround
+  tax
+  lda BlockFlags,x
+  cmp BottomCMP
+  rol FourCorners
+  lda #$40
+  add PlayerPXL            ; right side
+  lda PlayerPXH
+  adc #0
+  jsr GetLevelColumnPtr
+  sta BlockLR
+  jsr DoCollectible
+  jsr DoSpecialGround
+  tax
+  lda BlockFlags,x
+  cmp BottomCMP
+  rol FourCorners
+
+  ; Cancel the ladder if we move into a non-ladder thing
+  lda PlayerOnLadder
+  beq :+
+  lda BlockMiddle
+  cmp #Block::Ladder
+  beq :+
+  cmp #Block::LadderTop
+  beq :+
+;  cmp #Metatiles::ROPE
+;  beq :+
+  lda BlockLL
+  cmp #Block::Ladder
+  beq :+
+  cmp #Block::LadderTop
+  beq :+
+;  cmp #Metatiles::ROPE
+;  beq :+
+  lda BlockLR
+  cmp #Block::Ladder
+  beq :+
+  cmp #Block::LadderTop
+  beq :+
+;  cmp #Metatiles::ROPE
+;  beq :+
+  lsr PlayerOnLadder
+:
+ 
+  ; Don't react to collision if told not to
+  ; Currently only used by the spring?
+  lda SkipFourCorners
+  rtsne
+
+  ; If the player is standing on something, clear PlayerNeedsGround
+  lda FourCorners
+  and #%0011
+  beq :+
+    lda #0
+    sta PlayerNeedsGround
+  :
+
+  lda PlayerRidingSomething
+  beq :+
+    lda FourCorners
+    ora #%0011
+    sta FourCorners
+  :
+
+  ; now call the right routine
+  ldx FourCorners
+  lda FourCornersH,x
+  pha
+  lda FourCornersL,x
+  pha
+SkipFourCornersEntirely:
+  rts
+
+CheckMiddle:
+  ; check blocks in the middle
+  lda PlayerPYL
+  add #<(16*16)
+  lda PlayerPYH
+  adc #>(16*16)
+  tay
+  sta TempSpace
+  lda #$40
+  add PlayerPXL
+  lda PlayerPXH
+  adc #0
+  sta XForMiddle
+  jsr GetLevelColumnPtr
+  sta BlockMiddle
+
+  pha
+  ; also check for a ceiling barrier
+  ldy #0
+  lda (LevelBlockPtr),y
+  cmp #Block::CeilingBarrier
+  bne :+
+  lda PlayerPYH
+  bpl :+
+  lda #0
+  sta PlayerPYH
+  sta PlayerPYL
+  sta PlayerVYH
+  lda #$40
+  sta PlayerVYL
+:
+  pla
+  tay
+  rts
+
+HSpeedDirectionOffset:
+  .byt $8f, 0
+
+FourCornersL:
+  .byt <(FC_____ -1), <(FC____R -1)
+  .byt <(FC___L_ -1), <(FC___LR -1)
+  .byt <(FC__R__ -1), <(FC__R_R -1)
+  .byt <(FC__RL_ -1), <(FC__RLR -1)
+  .byt <(FC_L___ -1), <(FC_L__R -1)
+  .byt <(FC_L_L_ -1), <(FC_L_LR -1)
+  .byt <(FC_LR__ -1), <(FC_LR_R -1)
+  .byt <(FC_LRL_ -1), <(FC_LRLR -1)
+FourCornersH:
+  .byt >(FC_____ -1), >(FC____R -1)
+  .byt >(FC___L_ -1), >(FC___LR -1)
+  .byt >(FC__R__ -1), >(FC__R_R -1)
+  .byt >(FC__RL_ -1), >(FC__RLR -1)
+  .byt >(FC_L___ -1), >(FC_L__R -1)
+  .byt >(FC_L_L_ -1), >(FC_L_LR -1)
+  .byt >(FC_LR__ -1), >(FC_LR_R -1)
+  .byt >(FC_LRL_ -1), >(FC_LRLR -1)
+
+FC_____:
+  lda JumpGracePeriod
+  beq :+
+    jsr OfferJumpFromGracePeriod
+  :
+SavePosition:
+  lda PlayerPXL
+  sta PlayerLastGoodX+0
+  lda PlayerPXH
+  sta PlayerLastGoodX+1
+  lda PlayerPYL
+  sta PlayerLastGoodY+0
+  lda PlayerPYH
+  sta PlayerLastGoodY+1
+  rts
+FC_LR_R:
+FC_LRL_:
+  rts
+
+
+UnstuckX:
+  .lobytes -1, -1, -1,  0, 0, 1,  1, 1
+  .lobytes -2, -2, -2,  0, 0, 2,  2, 2
+  .lobytes -2, -2, -2,  0, 0, 2,  2, 2
+  .lobytes -3, -3, -3,  0, 0, 3,  3, 3
+UnstuckY:
+  .lobytes  0, -1,  1, -1, 1, 0, -1, 1
+  .lobytes  0, -1,  1, -1, 1, 0, -1, 1
+  .lobytes  0, -2,  2, -2, 2, 0, -2, 2
+  .lobytes  0, -3,  3, -3, 3, 0, -3, 3
+FC__RL_:
+FC_L__R:
+FC_LRLR:
+  lda PlayerOnLadder
+  beq :+
+    lda PlayerLastGoodX+0
+    sta PlayerPXL
+    lda PlayerLastGoodX+1
+    sta PlayerPXH
+    lda PlayerLastGoodY+0
+    sta PlayerPYL
+    lda PlayerLastGoodY+1
+    sta PlayerPYH
+    rts
+  :
+  ; TODO: check collision again
+
+  ; Attempt to find a position near the player that isn't solid
+  ldx #0
+  stx PlayerVYL
+  stx PlayerVYH
+UnstuckLoop:
+  lda PlayerPYL
+  add #<(16*16)
+  lda PlayerPYH
+  adc #>(16*16)
+  add UnstuckY,x
+  cmp #15
+  bcs Nope
+  tay
+  lda #$40
+  add PlayerPXL
+  lda PlayerPXH
+  adc UnstuckX,x
+  jsr GetLevelColumnPtr
+  tay
+  lda BlockFlags,y
+  bpl FoundOne
+Nope:
+  inx
+  cpx #32
+  bne UnstuckLoop
+  ; Didn't find a free spot, just push right instead as a last resort
+  lda PlayerPXL
+  add #$10
+  sta PlayerPXL
+  addcarry PlayerPXH
+FoundOne:
+  lda PlayerPYL
+  sta PlayerLastGoodY
+  lda PlayerPYH
+  add UnstuckY,x
+  sta PlayerLastGoodY+1
+
+  lda PlayerPXL
+  sta PlayerLastGoodX
+  lda PlayerPXH
+  add UnstuckX,x
+  sta PlayerLastGoodX+1
+
+  .if 0
+  lda PlayerNonSolidPXL
+  sta PlayerPXL
+  lda PlayerNonSolidPXH
+  sta PlayerPXH
+  lda PlayerNonSolidPYL
+  sta PlayerPYL
+  lda PlayerNonSolidPYH
+  sta PlayerPYH
+  .endif
+
+  .if 1
+  Difference = 0
+; -----------------------------------
+  lda PlayerLastGoodX+0
+  sbc PlayerPXL
+  sta Difference+0
+  lda PlayerLastGoodX+1
+  sbc PlayerPXH
+  ; and divide by 4 for smoothing
+  asr
+  ror Difference+0
+  asr
+  ror Difference+0
+  sta Difference+1
+
+  lda Difference+0
+  adc PlayerPXL
+  sta PlayerPXL
+  lda Difference+1
+  adc PlayerPXH
+  sta PlayerPXH
+; -----------------------------------
+  lda PlayerLastGoodY+0
+  sbc PlayerPYL
+  sta Difference+0
+  lda PlayerLastGoodY+1
+  sbc PlayerPYH
+  ; and divide by 4 for smoothing
+  asr
+  ror Difference+0
+  asr
+  ror Difference+0
+  sta Difference+1
+
+  lda Difference+0
+  adc PlayerPYL
+  sta PlayerPYL
+  lda Difference+1
+  adc PlayerPYH
+  sta PlayerPYH
+  .endif
+  rts
+
+FC_L_LR:
+  jsr FC___LR
+  jmp FC_L_L_
+FC__RLR:
+  jsr FC___LR
+  jmp FC__R_R
+
+CheckLR:
+  lda PlayerPYL
+  add #<(24*16)
+  lda PlayerPYH
+  adc #>(24*16)
+  tay
+  lda #$80
+  add PlayerPXL
+  lda PlayerPXH
+  adc #0
+  jsr GetLevelColumnPtr
+  tax
+  lda BlockFlags,x
+  rts
+
+CheckLL:
+  lda PlayerPYL
+  add #<(24*16)
+  lda PlayerPYH
+  adc #>(24*16)
+  tay
+  lda PlayerPXL
+  sub #1
+  lda PlayerPXH
+  sbc #0
+  jsr GetLevelColumnPtr
+  tax
+  lda BlockFlags,x
+  rts
+
+FC__R__:
+  jsr BumpBlocksAbove
+  lda #0
+  sta PlayerVXL
+  sta PlayerVXH
+
+  lda PlayerVYH
+  bpl :+
+  jsr CheckLR
+  bmi :+
+    lda #0
+    sta PlayerVYL
+    sta PlayerVYH
+  :
+  jsr CheckLL
+  bmi :+
+    lda #$8f
+    sta PlayerPXL
+  :
+  rts
+
+FC__R_R:
+  lda #$8f
+  sta PlayerPXL
+  lda #0
+  sta PlayerVXL
+  sta PlayerVXH
+  rts
+
+FC_L___:
+  jsr BumpBlocksAbove
+  lda #0
+  sta PlayerVXL
+  sta PlayerVXH
+
+  lda PlayerVYH
+  bpl :+
+  jsr CheckLL
+  bmi :+
+    lda #0
+    sta PlayerVYL
+    sta PlayerVYH
+  :
+  jsr CheckLR
+  bmi :+
+    lda #0
+    sta PlayerPXL
+    inc PlayerPXH
+  :
+  rts
+
+FC_L_L_:
+  lda #0
+  sta PlayerPXL
+  inc PlayerPXH
+  lda #0
+  sta PlayerVXL
+  sta PlayerVXH
+  rts
+
+FC_LR__:
+  lda #0
+  sta PlayerVYH
+  sta PlayerVYL
+
+  jsr BumpBlocksAbove
+  lda PlayerSwimming
+  bne :+
+;  lda #SFX::PLAYER_BUMP
+;  jmp PlaySoundDebounce
+:
+  rts
+BumpBlocksAbove: ; handle bumping into stuff
+  lda PlayerJumping
+  rtseq
+
+  ; left
+  lda PlayerPXH
+  jsr BumpOneBlockAbove
+
+  ; right
+  lda PlayerPXL
+  add #$70
+  lda PlayerPXH
+  adc #0
+  jmp BumpOneBlockAbove
+
+BumpOneBlockAbove:
+  ldy PlayerPYH
+  jsr GetLevelColumnPtr
+  cmp #BlockFirstBelow
+  bcc :+
+  cmp #BlockLastBelow+1
+  bcs :+
+    ; TODO
+  :
+  rts
+
+FC___L_:
+FC____R:
+FC___LR:
+  jsr SavePosition
+  lsr PlayerOnLadder
+
+;  lda NeedCollectibleBitSet ; delayed
+;  beq :+
+;    lsr NeedCollectibleBitSet
+;    ldy StartedLevelNumber
+;    jsr IndexToBitmap
+;    ora CollectibleBits,y 
+;    sta CollectibleBits,y
+;  :
+
+  ; Fall through a platform
+  ; (do the left and right floors have the same flags?)
+  ldx BlockLL
+  lda BlockFlags,x
+  and #<~M_POST_PROCESS
+  sta Temp
+
+  ldx BlockLR
+  lda BlockFlags,x
+  and #<~M_POST_PROCESS
+  cmp Temp
+  bne NotFallthrough
+    and #<~M_POST_PROCESS
+    cmp #M_SOLID_TOP|BlockClass::Fallthrough
+    bne NotFallthrough
+      lda PlayerDownTimer
+      cmp #8
+      bcc NotFallthrough
+        lda #KEY_DOWN
+        sta ForceControllerBits
+        lda #2
+        sta ForceControllerTime
+        rts
+  NotFallthrough:
+
+  ; Get on ladder from above
+  lda BlockLL
+  cmp #Block::LadderTop
+  bne :+
+  lda BlockLR
+  cmp #Block::LadderTop
+  bne :+
+    lda PlayerDownTimer
+    cmp #4
+    bcc :+
+     lda #KEY_DOWN
+     sta ForceControllerBits
+     lda #2
+     sta ForceControllerTime
+     rts
+  :
+
+  ; Set "Player on ground" flag
+  inc PlayerOnGround
+
+  ; If player started running via tap, keep running
+  ; and don't let the B button being unpressed stop it.
+  lda RunStartedWithTap
+  bne :+
+    lda keydown
+    and #KEY_B
+    sta PlayerWasRunning
+  :
+
+  lda SavedRunStyle
+  beq RunStyleWasB
+RunStyleTap:
+  ; Double-tap to run
+  countdown TapRunTimer
+
+  ; If you press in a different direction than
+  ; when you started running, you're not running
+  lda keydown
+  and #KEY_LEFT|KEY_RIGHT
+;  beq :+
+  cmp TapRunKey
+  bne RunCancel
+
+  ; If you let go you're no longer running
+  lda keydown
+  and #KEY_LEFT|KEY_RIGHT
+  bne :+
+    lda PlayerWasRunning
+    beq :+
+RunCancel:
+      lda PlayerWasRunning
+      php
+      lda #0
+      sta PlayerWasRunning
+      sta RunStartedWithTap
+      plp
+      beq :+
+      sta TapRunTimer
+  :
+
+  ; Set the timer if you press the button and the timer isn't going
+  lda keynew
+  and #KEY_LEFT|KEY_RIGHT
+  beq :+
+    ldy TapRunTimer   ; Is the tap timer going?
+    beq @SetTapTimer  ; Nope
+    lda #1
+    sta PlayerWasRunning
+    sta RunStartedWithTap
+    bne :+
+@SetTapTimer:         ; Start the tap timer
+    sta TapRunKey
+    lda #15
+    sta TapRunTimer
+:
+
+RunStyleWasB:
+
+  lda #0
+  sta PlayerVYH
+  sta PlayerVYL
+
+  lda PlayerRidingSomething
+  cmp #2
+  beq @SkipSnap
+  lda PlayerPYL
+  bmi :+
+    dec PlayerPYH
+  :
+
+  lda #$80
+  sta PlayerPYL
+@SkipSnap:
+
+OfferJump:
+  lda #JUMP_GRACE_PERIOD_LENGTH
+  sta JumpGracePeriod
+OfferJumpFromGracePeriod:
+  lda keynew
+  and #KEY_A
+  beq :+
+    lda #0
+    sta PlayerOnLadder
+    sta JumpGracePeriod
+    lda #<(-$50)
+    sta PlayerVYL
+    lda #>(-$50)
+    sta PlayerVYH
+    inc PlayerJumping
+;    lda #SFX::JUMP
+;    jsr PlaySound
+  :
+  rts
+LevelLinkStartYL:
+  .byt 0, 0
+LevelLinkStartYH:
+  .byt 13, 1
+BalloonOffsetLo:
+  .byt <-$20, <$20
+BalloonOffsetHi:
+  .byt >-$20, >$20
+.endproc
+; -----------------------------
+; END OF PLAYER HANDLING CODE
+; -----------------------------
+.export DisplayPlayer
+.proc DisplayPlayer
+DrawX = 0
+DrawY = 1
+Attrib = 2
+MiddleOffsetX = 3
+DrawX2 = 4
+  ; need to do this first even if we skip the drawing, because of PlayerDrawX and PlayerDrawY
+  jsr MakeDrawX
+  RealYPosToScreenPos PlayerPYL, PlayerPYH, DrawY
+
+  lda PlayerRidingSomething
+  sta PlayerRidingSomethingLast
+  lda #0
+  sta PlayerRidingSomething
+
+  ; check if the player's X is out of bounds,
+  ; and fix it if it is
+  lda DrawX
+  cmp #$08
+  bcs :+
+    lda #$80
+    sta PlayerPXL
+    lda #0
+    sta PlayerVXH
+    sta PlayerVXL
+    jsr MakeDrawX
+  :
+  lda DrawX
+  cmp #$f0
+  bcc :+
+    dec PlayerPXH
+    lda #$ff
+    sta PlayerPXL
+    lda #0
+    sta PlayerVXH
+    sta PlayerVXL
+    jsr MakeDrawX
+  :
+
+  ; skip drawing if too far off the top of the screen
+  lda PlayerPYH
+  cmp #255
+  beq :+
+  bpl :+
+    rts
+  :
+
+  ; copy to PlayerDrawX and PlayerDrawY which are used for collision detection
+  ; PlayerDrawY is also used for the coin display when you get coins
+  lda DrawX
+  sta PlayerDrawX
+  lda DrawY
+  sta PlayerDrawY
+
+  ; if the player's invincible, flicker their sprite
+  lda PlayerInvincible
+  lsr
+  bcc :+
+    rts
+  :
+
+  ; okay now we want to actually draw the player
+  lda #0
+  sta MiddleOffsetX
+  sta Attrib
+  sta PlayerTiles+6
+  sta PlayerAnimationFrame
+
+
+  ; Temporary - just locks it to one frame
+  ldy #$00
+  sty PlayerTiles+0
+  iny
+  sty PlayerTiles+1
+  iny
+  sty PlayerTiles+2
+  iny
+  sty PlayerTiles+3
+  iny
+  sty PlayerTiles+4
+  iny
+  sty PlayerTiles+5
+  jmp NoSpecialAnimation
+
+
+  lda PlayerOnLadder
+  beq :+
+    ldy #$20
+    bne CustomFrameBase
+  :
+
+  ldx PlayerTailAttack
+  beq :+
+    lda TailAttackFrame,x
+    sta PlayerAnimationFrame
+  :
+
+  lda PlayerAnimationFrame
+  beq NormalFrame
+  tay
+  lda #$0f
+  sta PlayerTiles+0
+  lda #$01
+  sta PlayerTiles+1
+  lda AnimO,y
+  ldx PlayerDir
+  beq :+
+  neg
+: sta MiddleOffsetX
+  lda Anim0,y
+  sta PlayerTiles+2
+  lda Anim1,y
+  sta PlayerTiles+3
+  lda Anim2,y
+  sta PlayerTiles+4
+  lda Anim3,y
+  sta PlayerTiles+5
+  lda Anim4,y
+  sta PlayerTiles+6
+  jmp NoSpecialAnimation
+NormalFrame:
+  ldy #$00
+CustomFrameBase:
+  sty PlayerTiles+0
+  iny
+  sty PlayerTiles+1
+  iny
+  sty PlayerTiles+2
+  iny
+  sty PlayerTiles+3
+  iny
+  sty PlayerTiles+4
+  iny
+  sty PlayerTiles+5
+
+  ; Animate holding something
+  lda CarryingPickupBlock
+  beq :+
+    lda PlayerOnLadder
+    bne :+
+    lda #$1f
+    sta PlayerTiles+1
+    lda #$2f
+    sta PlayerTiles+3
+  :
+EndAnimationFrame:
+
+  ; Animate swimming
+  lda PlayerSwimming
+  beq :+
+    lda retraces
+    lsr
+    lsr
+    lsr
+    and #1
+    tay
+    lda SwimmingFeet1,y
+    sta PlayerTiles+4
+    lda SwimmingFeet2,y
+    sta PlayerTiles+5
+    jmp NoSpecialAnimation
+  :
+
+  lda PlayerOnLadder
+  jne NoSpecialAnimation
+  lda PlayerJumping
+  beq :+
+    lda #$0c
+    sta PlayerTiles+3
+JumpingTilesForSwimming:
+    lda #$08
+    sta PlayerTiles+4
+    lda #$09
+    sta PlayerTiles+5
+    jmp NoSpecialAnimation
+  :
+
+  lda PlayerOnGround
+  bne :+
+    lda #$0d
+    sta PlayerTiles+2
+    lda #$0e
+    sta PlayerTiles+3
+    lda #$0a
+    sta PlayerTiles+4
+    lda #$0b
+    sta PlayerTiles+5
+    jmp NoSpecialAnimation
+  :
+
+  ; animate walking
+  lda PlayerVXL
+  ora PlayerVXH
+  beq :+
+    lda retraces
+    lsr
+    lsr
+    and #%11
+    tay
+    lda WalkFrameMR,y
+    sta PlayerTiles+3
+    lda WalkFrameBL,y
+    sta PlayerTiles+4
+    lda WalkFrameBR,y
+    sta PlayerTiles+5
+.if 0 ; old walk animation code
+    lda retraces
+    and #%100
+    beq :+
+      lda #$06
+      sta PlayerTiles+4
+      lda #$07
+      sta PlayerTiles+5
+.endif
+  :
+NoSpecialAnimation:
+
+  ; horizontally flip as the player moves up and down the ladder
+  lda PlayerOnLadder
+  beq :++
+    lda keydown
+    and #KEY_UP|KEY_DOWN
+    beq :+
+      lda retraces
+      sta PlayerLadderMoveFrame
+    :
+    lda PlayerLadderMoveFrame
+    and #%1000
+    beq DoHorizTileFlip
+    bne NoHorizTileFlip 
+  :
+
+; Draw balloon on top of player, if balloon is being used
+  lda PlayerHasBalloon
+  beq NoBalloon
+  ldx OamPtr
+
+  lda #$5c
+  sta OAM_TILE+(4*0),x
+  lda #$5d
+  sta OAM_TILE+(4*1),x
+  lda #OAM_COLOR_1
+  sta OAM_ATTR+(4*0),x
+  sta OAM_ATTR+(4*1),x
+
+  lda DrawX
+  sub #2
+  ldy PlayerDir
+  beq :+
+    add #4
+  :
+  sta OAM_XPOS+(4*0),x
+  sta OAM_XPOS+(4*1),x
+  lda DrawY
+  sta OAM_YPOS+(4*1),x
+  sub #8
+  sta OAM_YPOS+(4*0),x
+
+  lda #$00
+  sta PlayerTiles+0
+  lda #$1f
+  sta PlayerTiles+1
+  lda #$02
+  sta PlayerTiles+2
+  lda #$2f
+  sta PlayerTiles+3
+  txa
+  add #8
+  sta OamPtr
+NoBalloon:
+
+  ; flip horizontally
+  lda PlayerDir
+  beq :+
+DoHorizTileFlip:
+    lda #OAM_XFLIP
+    sta Attrib
+    swapy PlayerTiles+0, PlayerTiles+1
+    swapy PlayerTiles+2, PlayerTiles+3
+    swapy PlayerTiles+4, PlayerTiles+5
+  :
+NoHorizTileFlip:
+  lda PlayerOnLadder
+  beq :+
+    lda DrawX
+    sub #4
+    sta DrawX
+    jmp SkipRegularXFlip
+  :
+
+  lda PlayerDir
+  bne :+
+    lda DrawX
+    sub #8
+    sta DrawX
+  :
+SkipRegularXFlip:
+  lda DrawX
+  sta DrawX2
+
+  ldx OamPtr
+  ldy #0     ; current sprite
+PutSprite:
+  lda PlayerTiles,y
+  sta OAM_TILE,x
+
+  lda DrawX
+  add XPosList,y
+  sta OAM_XPOS,x
+
+  lda DrawY
+  add YPosList,y
+  sta OAM_YPOS,x
+
+  cpy #1
+  bne :+
+    lda DrawX
+    add MiddleOffsetX
+    sta DrawX
+  :
+
+  lda Attrib
+  sta OAM_ATTR,x
+  inx
+  inx
+  inx
+  inx
+  iny
+  cpy #6
+  bne PutSprite
+  stx OamPtr
+
+  lda PlayerTiles+6
+  beq NoExtraTile
+  sta OAM_TILE,x
+  ldy PlayerDir
+  lda DrawX
+  add ExtraTileX,y
+  sta OAM_XPOS,x
+  lda DrawY
+  add #16
+  sta OAM_YPOS,x
+  lda Attrib
+  sta OAM_ATTR,x
+  inx
+  inx
+  inx
+  inx
+  stx OamPtr
+NoExtraTile:
+
+  lda CoinShowTimer
+  beq NoCoinShow
+    dec CoinShowTimer
+    lda PlayerDrawY ; PlayerDrawY is offset to the center, so change the offset
+    sub #12
+    cmp #220        ; don't display if too far off the screen
+    bcs NoCoinShow
+    sta OAM_YPOS+(4*0),x
+    sta OAM_YPOS+(4*1),x
+    sta OAM_YPOS+(4*2),x
+    sta OAM_YPOS+(4*3),x
+
+    lda DrawX2
+    sub #8
+    sta OAM_XPOS+(4*0),x
+    add #8
+    sta OAM_XPOS+(4*1),x
+    add #8
+    sta OAM_XPOS+(4*2),x
+    add #8
+    sta OAM_XPOS+(4*3),x
+
+    lda #0
+    sta OAM_ATTR+(4*0),x
+    sta OAM_ATTR+(4*1),x
+    sta OAM_ATTR+(4*2),x
+    sta OAM_ATTR+(4*3),x
+
+    ldy Coins+0
+    lda BCD99,y
+    pha
+    .repeat 4
+      lsr
+    .endrep
+    add #$40
+    sta OAM_TILE+(4*2),x
+    pla
+    and #$0f
+    add #$40
+    sta OAM_TILE+(4*3),x
+
+    ldy Coins+1
+    lda BCD99,y
+    pha
+    .repeat 4
+      lsr
+    .endrep
+    add #$40
+    sta OAM_TILE+(4*0),x
+    pla
+    and #$0f
+    add #$40
+    sta OAM_TILE+(4*1),x    
+
+    txa
+    add #16
+    sta OamPtr
+NoCoinShow:
+  rts
+
+XPosList: .byt 0, 8, 0, 8, 0,  8
+YPosList: .byt 0, 0, 8, 8, 16, 16
+ExtraTileX: .byt 16, <-8
+
+Anim0: .byt $02, $10, $13, $15, $19 ;$20
+Anim1: .byt $03, $11, $14, $16, $1a ;$21
+Anim2: .byt $04, $12, $12, $17, $1b ;$22
+Anim3: .byt $05, $05, $05, $18, $1c ;$23
+Anim4: .byt $00, $00, $00, $00, $1d ;$24
+AnimO: .byt   0,   0,   0,   2,   3 ;  4
+TailAttackFrame:
+  .byt 1, 1, 2, 2, 3, 3, 4, 4, 4, 3, 3, 2, 2, 1
+SwimmingFeet1: .byt $8, $a
+SwimmingFeet2: .byt $9, $b
+
+; up left and up right always $00, $01
+; middle left always $02
+WalkFrameMR: .byt $30, $31, $30, $32
+WalkFrameBL: .byt $04, $33, $35, $33
+WalkFrameBR: .byt $05, $34, $36, $37
+
+MakeDrawX:
+  RealXPosToScreenPos PlayerPXL, PlayerPXH, DrawX
+  rts
+; 00 01 | 0f 01 | 0f 01 | 0f 01 | 0f 01     | 0f 01
+; 02 03 | 10 11 | 13 14 | 15 16 | 19 1a     | 20 21 
+; 04 05 | 12 05 | 12 05 | 17 18 | 1b 1c 1d  | 22 23 24
+.endproc
+
+.proc DoTailAttack
+  rts
+.if 0
+; Make sure nothing overwrites PressedUp or PressedDown or else it will crash the game
+PressedUp = 10
+PressedDown = 11
+  ; Break bricks first
+  lda PlayerPYH
+  tay
+  iny
+  ldx PlayerDir
+  lda PlayerPXL
+  add XOffsetL,x
+  lda PlayerPXH
+  adc XOffsetH,x
+  jsr GetLevelColumnPtr
+  sty 0
+  tay
+  lda MetatileFlags,y
+  and #M_BEHAVIOR
+  cmp #M_BRICKS
+  bne :+
+  ldy 0           ; Reload Y position
+  jsr DoBreakBricks
+  jmp WasBricks
+: ; not bricks? try for item block
+  cmp #M_SPECIAL_CEILING
+  bne :+
+  ldy 0           ; Reload Y position
+  jsr OpenPrize
+:
+WasBricks:
+
+  lda AttackKeyDownSnapshot
+  and #KEY_UP
+  sta PressedUp
+  lda AttackKeyDownSnapshot+1
+  and #KEY_SNES_X
+  ora PressedUp
+  sta PressedUp
+
+  lda AttackKeyDownSnapshot
+  and #KEY_DOWN
+  sta PressedDown
+  lda AttackKeyDownSnapshot+1
+  and #KEY_SNES_A
+  ora PressedDown
+  sta PressedDown
+
+  ; Okay, actually do the attack now
+  ; Launch the routine for the ability
+  lda PlayerAbility
+  asl
+  tax
+  lda AbilityTable+1,x
+  pha
+  lda AbilityTable+0,x
+  pha
+  rts
+
+XOffsetL: .byt <($80), <(-$40)
+XOffsetH: .byt >($80), >(-$40)
+
+AbilityTable:
+  .raddr AbilityNone
+  .raddr AbilityBlaster
+  .raddr AbilityGlider
+  .raddr AbilityBomb
+  .raddr AbilityFire
+  .raddr AbilityFirework
+  .raddr AbilityNice
+  .raddr AbilityBoomerang
+  .raddr AbilityMirror
+  .raddr AbilityWater
+  .raddr AbilityFan
+  .raddr AbilityBurger
+
+LimitObjectAmount:
+; limits the number of projectiles to a given amount by aborting if it's already at the limit
+  sta 0  ; 0 = limit
+
+  lda InfiniteProjectileCheat
+  beq :+
+  rts
+:
+
+  ldx #0
+  ldy #0 ; Y = counter for number of player projectiles
+: lda ObjectF1,x
+  and #<~1
+  cmp #Enemy::PLAYER_PROJECTILE*2
+  bne :+
+  iny ; yes, this is a player projectile
+  cpy 0
+  bne :+
+  pla
+  pla
+  ; if there's too many then just do a regular stun instead
+  lda #0
+  sta PressedUp
+  sta PressedDown
+  jmp AbilityNone
+: inx
+  cpx #ObjectLen
+  bne :--
+  rts
+
+AbilityNone:
+  ldy #PlayerProjectileType::STUN_STAR
+  lda PressedUp
+  beq :+
+  ldy #PlayerProjectileType::COPY_ORB
+: tya
+  jsr MakeShot
+  bcc Exit
+  lda #$40
+  jsr SetXVelocity
+  lda #20/4
+  sta ObjectTimer,x
+Exit:
+  rts
+AbilityBlaster:
+  lda #PlayerProjectileType::BLASTER_SHOT
+  jsr MakeShot
+  bcc @Exit
+  lda #$40
+  jsr SetXVelocity
+  lda #50/4
+  sta ObjectTimer,x
+@Exit:
+  rts
+AbilityGlider:
+  lda #4
+  jsr LimitObjectAmount
+  lda #PlayerProjectileType::LIFE_GLIDER
+  jsr MakeShot
+  bcc @Exit
+  lda PressedUp
+  sta ObjectF3,x
+  lda #140/4
+  sta ObjectTimer,x
+@Exit:
+  rts
+AbilityBomb:
+  lda #2
+  jsr LimitObjectAmount
+  lda #PlayerProjectileType::BOMB
+  jsr MakeShotWide
+  bcc @Exit
+  lda #200/4
+  sta ObjectTimer,x
+  lda PressedUp
+  ora PressedDown
+  beq :+
+    lsr ObjectTimer,x
+    lda #1
+    sta ObjectF3,x
+  :
+
+  lda PressedUp
+  beq :+
+    lda #$20
+    jsr SetXVelocity
+    lda #<-$40
+    sta ObjectVYL,x
+    lda #255
+    sta ObjectVYH,x
+  :
+@Exit:
+  rts
+AbilityFire:
+  lda #2
+  jsr LimitObjectAmount
+  lda #PlayerProjectileType::FIREBALL
+  jsr MakeShotWide
+  bcc @Exit
+  lda #80/4
+  sta ObjectTimer,x
+  lda PressedUp
+  beq :+
+    lda #<-$40
+    sta ObjectVYL,x
+    lda #255
+    sta ObjectVYH,x
+: lda PressedDown
+  bne :+
+    lda #$20
+    jsr SetXVelocity
+@Exit:
+: rts
+AbilityFirework:
+  lda #1
+  jsr LimitObjectAmount
+  lda #PlayerProjectileType::FIREWORK_CURSOR
+  jsr MakeShot
+  bcc @Exit
+  lda #120/4
+  sta ObjectTimer,x
+  lda #$10
+  jsr SetXVelocity
+@Exit:
+  rts
+AbilityNice:
+  lda #1
+  jsr LimitObjectAmount
+  lda #PlayerProjectileType::ICE_BLOCK
+  jsr MakeShotWide
+  bcc @Exit
+  lda #80/4
+  sta ObjectTimer,x
+  lda #$30
+  sta ObjectF3,x
+
+  lda PressedUp
+  beq :+
+  lda #$10
+  sta ObjectF3,x
+  lda #<-($40)
+  sta ObjectVYL,x
+  lda #>-($40)
+  sta ObjectVYH,x
+:
+
+  lda PressedDown       ; down+B: ice ride
+  beq :+
+;  lda PlayerNeedsGround ; only allow one ice ride before touching the ground
+;  bne :+
+  jsr RideOnProjectile
+:
+@Exit:
+  rts
+AbilityBoomerang:
+  lda #2
+  jsr LimitObjectAmount
+  lda #PlayerProjectileType::BOOMERANG
+  jsr MakeShot
+  bcc @Exit
+  lda #56/4
+  sta ObjectTimer,x
+
+  lda PressedUp
+  ora PressedDown
+  bne @NoXVelocity
+  lda #$30
+  jsr SetXVelocity
+@Exit:
+  rts
+@NoXVelocity:
+  lda PressedUp
+  beq :+
+  lda #<(-$30)
+  sta ObjectVYL,x
+  lda #>(-$30)
+  sta ObjectVYH,x
+: lda PressedDown
+  beq :+
+  lda #<($30)
+  sta ObjectVYL,x
+  lda #>($30)
+  sta ObjectVYH,x
+: rts
+
+AbilityMirror:
+  lda #3
+  jsr LimitObjectAmount
+  lda #PlayerProjectileType::MIRROR
+  jsr MakeShot
+  bcc @Exit
+  lda #20/4 ;40/4
+  sta ObjectTimer,x
+; Look like the mirror ability in Kirby. Unused because you can't really aim it?
+;  jsr huge_rand
+;  and #$0f
+;  sub #$08
+;  sta ObjectVYL,x
+;  sex
+;  sta ObjectVYH,x
+
+  lda #$30 ;18
+  jsr SetXVelocity
+@Exit:
+  rts
+AbilityWater:
+  lda #PlayerProjectileType::WATER_BOTTLE
+  jsr MakeShotWide
+  bcc @Exit
+  lda #48/4
+  sta ObjectTimer,x
+
+  lda #0
+  sta 0
+  lda PressedUp
+  cmp #1
+  rol 0
+  lda PressedDown
+  cmp #1
+  rol 0
+  ldy 0
+
+  lda WaterHSpeeds,y  
+  jsr SetXVelocity
+
+  ldy 0
+  lda WaterVSpeeds,y
+  sta ObjectVYL,x
+  lda #255
+  sta ObjectVYH,x
+@Exit:
+  rts
+; none, down, up, up+down
+WaterHSpeeds: .byt $20, $10, $28, $20
+WaterVSpeeds: .byt <-$40, <-$30, <-$50, <-$40
+
+AbilityFan:
+  lda #3
+  jsr LimitObjectAmount
+  lda #PlayerProjectileType::TORNADO
+  jsr MakeShotWide
+  bcc @Exit
+
+  ; Up/down control acceleration
+  lda #1
+  sta ObjectF4,x
+  lda PressedUp
+  beq :+
+    lda #3
+    sta ObjectF4,x
+  :
+  lda PressedDown
+  beq :+
+    lda #0
+    sta ObjectF4,x
+  :
+
+  lda #30/4
+  sta ObjectTimer,x
+  lda #$2c
+  jsr SetXVelocity
+@Exit:
+  rts
+AbilityBurger:
+  lda #2
+  jsr LimitObjectAmount
+  lda #PlayerProjectileType::BURGER
+  jsr MakeShotWide
+  bcc @Exit
+  lda #40/4
+  sta ObjectTimer,x
+
+  lda PressedDown           ; down+B: burger ride
+  beq :+
+  lda PlayerOnLadder
+  bne :+
+  lda InfiniteProjectileCheat
+  bne @BurgerOK
+  lda PlayerNeedsGround ; only allow one burger ride before touching the ground
+  bne :+
+@BurgerOK:
+  jsr RideOnProjectile
+:
+  lda #$30
+  jsr SetXVelocity
+@Exit:
+  rts
+
+RideOnProjectile:
+  inc PlayerNeedsGround
+  inc DownLockFromRideable
+
+  lda PlayerPYL
+  sta 0
+  lda PlayerPYH
+  sta 1
+
+  ldy PlayerDir
+  lda PlayerPXL
+  sub @XOffset,y
+  sta ObjectPXL,x
+
+  lda PlayerPXH
+  sbc #0
+  sta ObjectPXH,x
+
+  lda ObjectPYL,x
+  sub #$80
+  sta PlayerPYL
+  lda ObjectPYH,x
+  sbc #$01
+  sta PlayerPYH
+
+  lda #0
+  sta PlayerVYL
+  sta PlayerVYH
+
+  ; Don't push into ceilings
+  lda PlayerPYL
+  add #$80
+  lda PlayerPYH
+  adc #0
+  tay
+  lda PlayerPXL
+  add #$40
+  lda PlayerPXH
+  adc #0
+  jsr GetLevelColumnPtr
+  tay
+  lda MetatileFlags,y
+  bpl @NotPushedIntoCeiling
+    ; restore the Y position
+    lda 0
+    sta PlayerPYL
+    lda 1
+    sta PlayerPYH
+@NotPushedIntoCeiling:
+  rts
+@XOffset:
+ .byt $70, $10
+
+SetXVelocity:
+  sta ObjectVXL,x
+  tay
+  lda #0
+  sta ObjectVXH,x
+  tya
+  ldy PlayerDir
+  beq :+
+  neg
+  sta ObjectVXL,x
+  lda #255
+  sta ObjectVXH,x
+: rts
+
+MakeShotCommon:
+  jsr ObjectClearX
+  lda 0
+  sta ObjectF2,x
+  rts
+
+MakeShotWide:
+  sta 0
+  jsr FindFreeObjectX
+  bcs :+
+  clc
+  rts
+: lda #Enemy::PLAYER_PROJECTILE*2
+  sta ObjectF1,x
+  jsr MakeShotCommon
+  lda PlayerPYL
+  add #8*16
+  sta ObjectPYL,x
+  lda PlayerPYH
+  adc #0
+  sta ObjectPYH,x
+  ldy PlayerDir
+  beq Right
+Left16Wide:
+  lda PlayerPXL
+  sta ObjectPXL,x
+  lda PlayerPXH
+  sub #1
+  sta ObjectPXH,x
+  inc ObjectF1,x
+  sec
+  rts
+
+MakeShot:
+  sta 0
+  jsr FindFreeObjectX
+  bcs :+
+  clc
+  rts
+: lda PlayerDir
+  ora #Enemy::PLAYER_PROJECTILE*2
+  sta ObjectF1,x
+  jsr MakeShotCommon
+  lda PlayerPYL
+  add #13*16
+  sta ObjectPYL,x
+  lda PlayerPYH
+  adc #0
+  sta ObjectPYH,x
+  ldy PlayerDir
+  beq Left
+Right:
+  lda PlayerPXL
+  add #$80
+  sta ObjectPXL,x
+  lda PlayerPXH
+  adc #0
+  sta ObjectPXH,x
+  sec
+  rts
+Left:
+  lda PlayerPXL
+  sub #$40
+  sta ObjectPXL,x
+  lda PlayerPXH
+  sbc #0
+  sta ObjectPXH,x
+  sec
+  rts
+.endif
+.endproc
+
+.proc DoSpecialGround
   rts
 .endproc
 
-
-; We put this in bank 2 to test the bankcall mechanism
-.segment "BANK02"
-.export draw_player_sprite_far
-;;
-; Draws the player's character to the display list as six sprites.
-; In the template, we don't need to handle half-offscreen actors,
-; but a scrolling game will need to "clip" sprites (skip drawing the
-; parts that are offscreen).
-.proc draw_player_sprite_far
-draw_y = 0
-cur_tile = 1
-x_add = 2         ; +8 when not flipped; -8 when flipped
-draw_x = 3
-rows_left = 4
-row_first_tile = 5
-draw_x_left = 7
-
-  lda #3
-  sta rows_left
-  
-  ; In platform games, the Y position is often understood as the
-  ; bottom of a character because that makes certain things related
-  ; to platform collision easier to reason about.  Here, the
-  ; character is 24 pixels tall, and player_yhi is the bottom.
-  ; On the NES, sprites are drawn one scanline lower than the Y
-  ; coordinate in the OAM entry (e.g. the top row of pixels of a
-  ; sprite with Y=8 is on scanline 9).  But in a platformer, it's
-  ; also common practice to overlap the bottom row of a sprite's
-  ; pixels with the top pixel of the background platform that they
-  ; walk on to suggest depth in the background.
-  lda player_yhi
-  sec
-  sbc #24
-  sta draw_y
-
-  ; set up increment amounts based on flip value
-  ; A: actual X coordinate of first sprite
-  ; X: distance to move (either 8 or -8)
-  lda player_xhi
-  ldx #8
-  bit player_facing
-  bvc not_flipped
-  clc
-  adc #8
-  ldx #(256-8)
-not_flipped:
-  sta draw_x_left
-  stx x_add
-
-  ; the eight frames start at $10, $12, ..., $1E
-  ; 0: still; 1-7: scooting
-  lda player_frame
-  asl a
-  ora #$10
-  sta row_first_tile
-  
-  ; frame 7 is special: the player needs to be drawn 1 unit forward
-  ; because of how far he's leaned forward
-  lda player_frame
-  cmp #7
-  bcc not_frame_7
-  
-  ; here, carry is set, so anything you add will get another 1
-  ; added to it, so subtract 1 when constructing the value to add
-  ; to the player's X position
-  lda #1 - 1  ; facing right: move forward by 1
-  bit player_facing
-  bvc f7_not_flipped
-  lda #<(-1 - 1)  ; facing left: move left by 1
-f7_not_flipped:
-  adc draw_x_left
-  sta draw_x_left
-not_frame_7:
-
-  ldx OamPtr
-rowloop:
-  ldy #2              ; Y: remaining width on this row in 8px units
-  lda row_first_tile
-  sta cur_tile
-  lda draw_x_left
-  sta draw_x
-tileloop:
-
-  ; draw an 8x8 pixel chunk of the character using one entry in the
-  ; display list
-  lda draw_y
-  sta OAM,x
-  lda cur_tile
-  inc cur_tile
-  sta OAM+1,x
-  lda player_facing
-  sta OAM+2,x
-  lda draw_x
-  sta OAM+3,x
-  clc
-  adc x_add
-  sta draw_x
-  
-  ; move to the next entry of the display list
-  inx
-  inx
-  inx
-  inx
-  dey
-  bne tileloop
-
-  ; move to the next row, which is 8 scanlines down and on the next
-  ; row of tiles in the pattern table
-  lda draw_y
-  clc
-  adc #8
-  sta draw_y
-  lda row_first_tile
-  clc
-  adc #16
-  sta row_first_tile
-  dec rows_left
-  bne rowloop
-
-  stx OamPtr
-  jmp bankrts
+.proc DoSpecialWall
+  rts
 .endproc
 
+.proc DoCollectible
+  rts
+.endproc
+
+.proc DoSpecialMisc
+  rts
+.endproc

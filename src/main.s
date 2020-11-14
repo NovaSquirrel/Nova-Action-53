@@ -38,6 +38,15 @@ OAM = $0200
 .code
 .proc main
 
+  lda #2
+  sta NovaAccelSpeed
+  lda #4
+  sta NovaDecelSpeed
+  lda #<-(4*16)
+  sta NovaRunSpeedL
+  lda #<(4*16)
+  sta NovaRunSpeedR
+
   ; Now the PPU has stabilized, and we're still in vblank.  Copy the
   ; palette right now because if you load a palette during forced
   ; blank (not vblank), it'll be visible as a rainbow streak.
@@ -57,23 +66,26 @@ OAM = $0200
   jsr RenderLevelScreens  
 
   ; Set up game variables, as if it were the start of a new level.
-  jsr init_player
+;  jsr init_player
 
 forever:
 
   ; Game logic
   jsr ReadController
-  jsr move_player
 
-  ; The first entry in OAM (indices 0-3) is "sprite 0".  In games
-  ; with a scrolling playfield and a still status bar, it's used to
-  ; help split the screen.  This demo doesn't use scrolling, but
-  ; yours might, so I'm marking the first entry used anyway.  
-  ldx #4
+  ldx #0
   stx OamPtr
-  ; adds to OamPtr
-  ldx #draw_player_sprite
-  jsr bankcall
+
+  .import RunPlayer
+  lda #<.bank(RunPlayer)
+  jsr setPRGBank
+  jsr RunPlayer
+;  jsr AdjustCamera
+  .import DisplayPlayer
+  jsr DisplayPlayer
+
+;  ldx #draw_player_sprite
+;  jsr bankcall
   ldx OamPtr
   jsr ppu_clear_oam
 
@@ -114,6 +126,10 @@ copypalloop:
   bcc copypalloop
   rts
 .endproc
+
+AdjustCamera:
+  rts
+
 .segment "RODATA"
 initial_palette:
   .byt $31, $1a, $2a, $37
@@ -127,5 +143,4 @@ initial_palette:
   .byt $31, $16, $27, $37
 ;  .byt $22,$18,$28,$38,$0F,$06,$16,$26,$0F,$08,$19,$2A,$0F,$02,$12,$22
 ;  .byt $22,$08,$16,$37,$0F,$06,$16,$26,$0F,$0A,$1A,$2A,$0F,$02,$12,$22
-
 
