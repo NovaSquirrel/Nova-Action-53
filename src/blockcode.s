@@ -315,6 +315,8 @@ BrickFenceAbove:
 
 .export AutotileSmallBush
 .proc AutotileSmallBush
+  lda #Block::SmallBushBottom
+  sta ScreenBuffer+1,x
   rts
 .endproc
 
@@ -343,5 +345,22 @@ BrickFenceAbove:
 
 .export AutotileBigBush
 .proc AutotileBigBush
+  rts
+.endproc
+
+.export AutotilePier
+.proc AutotilePier
+Loop:
+  inx
+  txa
+  and #15
+  beq Exit
+  lda ScreenBuffer,x
+  bne Exit
+  lda #Block::PierMiddle
+  sta ScreenBuffer,x
+  bne Loop ; Unconditional  
+Exit:
+  dex
   rts
 .endproc

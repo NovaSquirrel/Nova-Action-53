@@ -153,8 +153,8 @@ DidntTeleport:
   sub #4 ; Go back four chunks
   sta 15 ; Current chunk
 
-  ; Loop through the columns we'll write to the 
-  lda #15
+  ; Loop through the columns we'll write to the cache
+  lda #16
   sta 14 ; Counter for how many chunks to go
 LoadCacheLoop:
   ; Get a level pointer 

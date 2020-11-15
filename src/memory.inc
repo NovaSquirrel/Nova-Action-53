@@ -11,6 +11,7 @@ MaxDelayedMetaEdits = 10
   .globalzp PlayerWasRunning, PlayerDir, PlayerJumping, PlayerOnGround, PlayerJumpCancelLock, PlayerWalkLock, PlayerDownTimer, PlayerSelectTimer
   .globalzp PlayerHealth, PlayerTailAttack, PlayerAnimationFrame, PlayerTiles, SoundDebounce, ForceControllerBits, ForceControllerTime
   .globalzp ScrollUpdateChunk
+  .global ScrollCacheUpdateSource, ScrollCacheUpdateDestination
   .globalzp LevelBlockPtr
 
   ; the NES CPU can't access VRAM outside of vblank, so this is a queue
@@ -92,3 +93,6 @@ MaxDelayedMetaEdits = 10
   .global SavedRunStyle, SavedShootWhileWalking
   .global PlayerLadderMoveFrame
   .global DownLockFromRideable
+
+  .global ScrollCacheUpdateSource      ; VRAM address, little endian
+  .global ScrollCacheUpdateDestination ; CPU address, little endian

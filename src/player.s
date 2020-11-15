@@ -158,13 +158,13 @@ BlockUL = 2
 BlockUR = 3
 BlockLL = 4
 BlockLR = 5
-BlockFootL = TempSpace+1  ; TempSpace is free here because
-BlockFootR = TempSpace+2  ; the buffer isn't filled until after Handleplayer
+BlockFootL = TouchTemp
+BlockFootR = TouchTemp+1
 FourCorners = 6
-SkipTop = TempSpace+3
-;BlockMiddle = TempSpace+4 - moved to its own variable
-XForMiddle  = TempSpace+5
-OldPlayerSwimming = TempSpace+6
+SkipTop = TouchTemp+2
+;BlockMiddle = TempSpace+4
+XForMiddle  = TouchTemp+3
+OldPlayerSwimming = TouchTemp+4
 BottomCMP = 7
 SkipFourCorners = 8
 MaxSpeedLeft = 9
@@ -717,7 +717,7 @@ TopWasSkipped:
   cpy #BlockLastInside+1
   bcs DoneCheckMiddle
   tya ; Y contains the block ID, copy it back
-  ldy TempSpace
+  ldy TempVal
   jsr DoSpecialMisc
 DoneCheckMiddle:
 
@@ -859,7 +859,7 @@ CheckMiddle:
   lda PlayerPYH
   adc #>(16*16)
   tay
-  sta TempSpace
+  sta TempVal
   lda #$40
   add PlayerPXL
   lda PlayerPXH

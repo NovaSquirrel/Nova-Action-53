@@ -286,8 +286,8 @@ t $41 $42
 +StoneMiddle
 solid
 palette gray
-t $51 $51
-t $51 $51
+t $41 $41
+t $41 $41
 
 +FloatingPlatform
 autotile AutotileFloatingPlatform
@@ -635,6 +635,7 @@ t $fc $fd
 t $fa $fb
 
 +PierTop
+autotile AutotilePier
 solid_top
 palette orange
 q $a8

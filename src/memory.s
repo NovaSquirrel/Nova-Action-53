@@ -60,8 +60,7 @@
   ; Scrolling makes use of a buffer that holds 30 tiles that are then written vertically
   ThirtyUpdateAddr: .res 2      ; PPU address to write the buffer to
   ThirtyUpdateTile: .res 30     ; 30 tiles to write
-
-  ScrollLevelPointer: .res 2    ; Pointer to level data, used while scrolling in new tiles
+  ScrollLevelPointer: .res 2    ; Pointer to level data, used while scrolling in new tiles (also used as another byte of ThirtyUpdateTile)
 
   OamPtr:      .res 1 ; Index the next OAM entry goes in
 
@@ -227,3 +226,6 @@ CurrentGameState:
   SavedShootWhileWalking: .res 1
   PlayerLadderMoveFrame: .res 1
   DownLockFromRideable: .res 1
+
+  ScrollCacheUpdateSource: .res 2      ; VRAM address, little endian
+  ScrollCacheUpdateDestination: .res 2 ; CPU address, little endian
